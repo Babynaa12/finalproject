@@ -1,253 +1,258 @@
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework import status
+from rest_framework.permissions import IsAuthenticated, AllowAny
+
+from django.contrib.auth import authenticate, get_user_model
+from django.utils import timezone
+
+from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.views import TokenObtainPairView
+
 from .models import *
 from .serializers import *
-from rest_framework.permissions import IsAuthenticated, AllowAny
-from django.contrib.auth import get_user_model, authenticate
-from rest_framework_simplejwt.tokens import RefreshToken
-from datetime import date
-from django.utils import timezone
 
 User = get_user_model()
 
-# ========================================================
-# 1. AUTH VIEWS (Registration & Login via JWT)
-# ========================================================
 
+# ========================================================
+# JWT CUSTOM LOGIN
+# ========================================================
+class MyTokenObtainPairView(TokenObtainPairView):
+    serializer_class = MyTokenObtainPairSerializer
+
+
+# ========================================================
+# REGISTER USER
+# ========================================================
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def register_user(request):
-    """
-    Register user => returns user info + JWT tokens
-    """
     serializer = EmployeeRegisterSerializer(data=request.data)
+
     if serializer.is_valid():
         user = serializer.save()
+
         refresh = RefreshToken.for_user(user)
+
         return Response({
-            'user': EmployeeSerializer(user).data,
-            'refresh': str(refresh),
-            'access': str(refresh.access_token)
+            "user": EmployeeSerializer(user).data,
+            "refresh": str(refresh),
+            "access": str(refresh.access_token)
         }, status=status.HTTP_201_CREATED)
+
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
+# ========================================================
+# LOGIN USER (FIXED FOR EMAIL SYSTEM)
+# ========================================================
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def login_user(request):
-    """
-    Login existing user and return JWT tokens
-    """
-    username = request.data.get('username')  # Or email depending on your setting
+    username_or_email = request.data.get('username')  # can be email OR username
     password = request.data.get('password')
 
-    if not username or not password:
-        return Response({'error': 'Username/Email and password required'}, status=status.HTTP_400_BAD_REQUEST)
+    if not username_or_email or not password:
+        return Response(
+            {"error": "Username/Email and password are required"},
+            status=status.HTTP_400_BAD_REQUEST
+        )
 
-    user = authenticate(username=username, password=password)
+    user = authenticate(
+        request,
+        username=username_or_email,
+        password=password
+    )
+
     if user is None:
-        return Response({'error': 'Invalid credentials'}, status=status.HTTP_411_UNAUTHORIZED if hasattr(status, 'HTTP_411_UNAUTHORIZED') else status.HTTP_401_UNAUTHORIZED)
+        return Response(
+            {"error": "Invalid credentials"},
+            status=status.HTTP_401_UNAUTHORIZED
+        )
 
     refresh = RefreshToken.for_user(user)
+
     return Response({
-        'refresh': str(refresh),
-        'access': str(refresh.access_token),
-        'user': {
-            'id': user.id,
-            'username': user.username,
-            'email': user.email,
-            'role': getattr(user, 'role', None),
-            'name': f"{user.first_name} {user.last_name}"
+        "refresh": str(refresh),
+        "access": str(refresh.access_token),
+        "user": {
+            "id": user.id,
+            "email": user.email,
+            "username": user.username,
+            "role": user.role,
+            "name": f"{user.first_name} {user.last_name}"
         }
-    }, status=status.HTTP_200_OK)
-
+    })
 
 # ========================================================
-# 2. MAIN FUNCTION: UNIVERSAL DASHBOARD STATS
+# DASHBOARD (ROLE BASED)
 # ========================================================
-
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def dashboard_stats(request):
-    """
-    Main single dashboard view tailored to the logged-in user's role
-    """
     user = request.user
     role = getattr(user, 'role', 'Staff')
-    today = timezone.now().date()
 
     data = {
-        'user_role': role,
-        'summary_stats': {},
-        'main_content': []
+        "role": role,
+        "summary": {},
+        "data": []
     }
 
-    # --- ROLE: STANDARD STAFF ---
+    # STAFF
     if role == 'Staff':
-        my_apps = PromotionApplication.objects.filter(employee=user).order_by('-created_at')
-        my_appraisals = Appraisal.objects.filter(employee=user).order_by('-evaluation_date')
-        
-        data['summary_stats'] = {
-            'total_applications': my_apps.count(),
-            'pending_applications': my_apps.filter(status='Pending').count(),
-            'latest_appraisal_score': my_appraisals.first().score if my_appraisals.exists() else "N/A"
-        }
-        data['main_content'] = PromotionApplicationSerializer(my_apps, many=True).data
+        apps = PromotionApplication.objects.filter(employee=user)
 
-    # --- ROLE: LINE MANAGER ---
+        data["summary"] = {
+            "total_applications": apps.count(),
+            "pending": apps.filter(manager_status='Pending').count(),
+        }
+
+        data["data"] = PromotionApplicationSerializer(apps, many=True).data
+
+    # MANAGER
     elif role == 'Manager':
-        subordinates = Employee.objects.filter(manager=user)
-        subordinate_apps = PromotionApplication.objects.filter(employee__in=subordinates).order_by('-created_at')
-        
-        data['summary_stats'] = {
-            'total_subordinates': subordinates.count(),
-            'pending_reviews': subordinate_apps.filter(status='Pending').count()
-        }
-        data['main_content'] = PromotionApplicationSerializer(subordinate_apps, many=True).data
+        sub = Employee.objects.filter(manager=user)
+        apps = PromotionApplication.objects.filter(employee__in=sub)
 
-    # --- ROLE: HR OR ADMIN ---
-    elif role in ['HR', 'Admin']:
-        data['summary_stats'] = {
-            'total_company_staff': Employee.objects.count(),
-            'total_pending_applications': PromotionApplication.objects.filter(status='Pending').count(),
-            'total_departments': Department.objects.count(),
+        data["summary"] = {
+            "subordinates": sub.count(),
+            "pending": apps.filter(manager_status='Pending').count(),
         }
-        all_apps = PromotionApplication.objects.all().order_by('-created_at')
-        data['main_content'] = PromotionApplicationSerializer(all_apps, many=True).data
+
+        data["data"] = PromotionApplicationSerializer(apps, many=True).data
+
+    # HR / ADMIN
+    elif role in ['HR', 'Admin']:
+        apps = PromotionApplication.objects.all()
+
+        data["summary"] = {
+            "employees": Employee.objects.count(),
+            "pending": apps.filter(manager_status='Pending').count(),
+            "departments": Department.objects.count(),
+        }
+
+        data["data"] = PromotionApplicationSerializer(apps, many=True).data
 
     return Response(data, status=status.HTTP_200_OK)
 
 
 # ========================================================
-# 3. AUTOMATED PROMOTION ENGINE LOGIC
+# ELIGIBILITY CHECK
 # ========================================================
-
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def check_eligibility(request):
-    """
-    Automated evaluation engine check for custom promotion criteria
-    """
     user = request.user
-    if not getattr(user, 'job_title', None):
-        return Response({'eligible': False, 'reason': 'No current Job Title assigned.'})
 
-    # Evaluate service longevity
-    years_served = (timezone.now().date() - user.hire_date).days / 365.25
-    required_years = user.job_title.min_years_required
-    
-    if years_served < required_years:
-        return Response({
-            'eligible': False, 
-            'reason': f'Requires {required_years} years of service. Current: {round(years_served, 1)} years.'
-        })
+    if not user.job_title:
+        return Response({"eligible": False, "reason": "No job title"})
 
-    # Evaluate metric appraisal points
-    latest_appraisal = Appraisal.objects.filter(employee=user).order_by('-evaluation_date').first()
-    if not latest_appraisal:
-        return Response({'eligible': False, 'reason': 'No performance evaluations on record.'})
-        
-    required_score = user.job_title.min_appraisal_score
-    if latest_appraisal.score < required_score:
-        return Response({
-            'eligible': False,
-            'reason': f'Minimum performance threshold not met. Score: {latest_appraisal.score} (Requires {required_score}).'
-        })
+    years = (timezone.now().date() - user.hire_date).days / 365.25
+
+    if years < user.job_title.min_years_required:
+        return Response({"eligible": False, "reason": "Not enough experience"})
+
+    appraisal = Appraisal.objects.filter(employee=user).order_by('-created_at').first()
+
+    if not appraisal:
+        return Response({"eligible": False, "reason": "No appraisal record"})
+
+    if appraisal.score < user.job_title.min_appraisal_score:
+        return Response({"eligible": False, "reason": "Low performance score"})
 
     return Response({
-        'eligible': True,
-        'reason': 'All promotion eligibility thresholds met successfully.',
-        'current_title': user.job_title.title
+        "eligible": True,
+        "message": "Eligible for promotion"
     })
 
 
+# ========================================================
+# PROMOTION DECISION
+# ========================================================
 @api_view(['PUT'])
 @permission_classes([IsAuthenticated])
 def process_promotion_decision(request, pk):
-    """
-    Updates application status. Automatically switches job titles upon approval.
-    """
     if request.user.role not in ['Manager', 'HR', 'Admin']:
-        return Response({'error': 'Unauthorized action'}, status=status.HTTP_403_FORBIDDEN)
+        return Response({"error": "Unauthorized"}, status=status.HTTP_403_FORBIDDEN)
 
     try:
-        application = PromotionApplication.objects.get(pk=pk)
+        app = PromotionApplication.objects.get(id=pk)
     except PromotionApplication.DoesNotExist:
-        return Response({'error': 'Application record not found'}, status=status.HTTP_404_NOT_FOUND)
+        return Response({"error": "Not found"}, status=status.HTTP_404_NOT_FOUND)
 
-    new_status = request.data.get('status') # 'Approved' or 'Rejected'
-    application.status = new_status
-    application.comments = request.data.get('comments', '')
-    application.save()
+    new_status = request.data.get("status")
+    comments = request.data.get("comments", "")
 
-    if new_status == 'Approved':
-        employee = application.employee
-        # Archive history records
+    app.final_status = new_status
+    app.manager_comments = comments
+    app.save()
+
+    if new_status == "Approved":
+        emp = app.employee
+
         PromotionHistory.objects.create(
-            employee=employee,
-            old_job_title=employee.job_title,
-            new_job_title=application.proposed_job_title,
-            promotion_date=timezone.now().date()
+            employee=emp,
+            old_title=emp.job_title,
+            new_title=app.targeted_title
         )
-        # Apply promotion updates
-        employee.job_title = application.proposed_job_title
-        employee.save()
 
-    return Response({'message': f'Application has been updated to {new_status}'}, status=status.HTTP_200_OK)
+        emp.job_title = app.targeted_title
+        emp.status = "Promoted"
+        emp.save()
+
+    return Response({"message": "Updated successfully"})
 
 
 # ========================================================
-# 4. THE GENERIC CRUD FACTORY FUNCTION
+# GENERIC CRUD
 # ========================================================
+def generic_api(model, serializer):
 
-def generic_api(model_class, serializer_class):
-    
     @api_view(['GET', 'POST'])
     @permission_classes([IsAuthenticated])
-    def manage_view(request):
-        if request.method == 'GET':
-            objects = model_class.objects.all()
-            serializer = serializer_class(objects, many=True)
-            return Response(serializer.data, status=status.HTTP_200_OK)
+    def list_create(request):
+        if request.method == "GET":
+            qs = model.objects.all()
+            return Response(serializer(qs, many=True).data)
 
-        elif request.method == 'POST':
-            serializer = serializer_class(data=request.data, context={'request': request})
-            if serializer.is_valid():
-                serializer.save()
-                return Response(serializer.data, status=status.HTTP_201_CREATED)
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        serializer_obj = serializer(data=request.data)
+
+        if serializer_obj.is_valid():
+            serializer_obj.save()
+            return Response(serializer_obj.data)
+
+        return Response(serializer_obj.errors, status=400)
 
     @api_view(['GET', 'PUT', 'DELETE'])
     @permission_classes([IsAuthenticated])
-    def manage_detail_view(request, pk):
+    def detail(request, pk):
         try:
-            obj = model_class.objects.get(pk=pk)
-        except model_class.DoesNotExist:
-            return Response(status=status.HTTP_404_NOT_FOUND)
+            obj = model.objects.get(id=pk)
+        except model.DoesNotExist:
+            return Response({"error": "Not found"}, status=404)
 
-        if request.method == 'GET':
-            serializer = serializer_class(obj)
-            return Response(serializer.data, status=status.HTTP_200_OK)
+        if request.method == "GET":
+            return Response(serializer(obj).data)
 
-        elif request.method == 'PUT':
-            serializer = serializer_class(obj, data=request.data)
-            if serializer.is_valid():
-                serializer.save()
-                return Response(serializer.data, status=status.HTTP_200_OK)
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        if request.method == "PUT":
+            s = serializer(obj, data=request.data)
+            if s.is_valid():
+                s.save()
+                return Response(s.data)
+            return Response(s.errors)
 
-        elif request.method == 'DELETE':
+        if request.method == "DELETE":
             obj.delete()
-            return Response(status=status.HTTP_204_NO_CONTENT)
-        
-    return manage_view, manage_detail_view
+            return Response({"message": "Deleted"})
+
+    return list_create, detail
 
 
 # ========================================================
-# 5. INSTANTIATE ALL 7 ARCHITECTURAL CRUD ENDPOINTS
+# CRUD INSTANCES
 # ========================================================
-
 manage_employees_list, manage_employees_detail = generic_api(Employee, EmployeeSerializer)
 manage_departments_list, manage_departments_detail = generic_api(Department, DepartmentSerializer)
 manage_jobtitles_list, manage_jobtitles_detail = generic_api(JobTitle, JobTitleSerializer)
