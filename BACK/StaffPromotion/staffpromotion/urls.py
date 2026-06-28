@@ -21,7 +21,7 @@ urlpatterns = [
     # ========================================================
     path('promotion/check-eligibility/', views.check_eligibility, name='check_eligibility'),
     path('promotion/decision/<int:pk>/', views.process_promotion_decision, name='process_decision'),
-
+    
     # ========================================================
     # EMPLOYEES
     # ========================================================

@@ -1,5 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import AbstractUser
+from django.core.validators import FileExtensionValidator
+
 
 # ==========================
 # 1. DEPARTMENT
@@ -33,62 +35,64 @@ class JobTitle(models.Model):
 # 3. EMPLOYEE (CUSTOM USER)
 # ==========================
 class Employee(AbstractUser):
+
     ROLE_CHOICES = (
-        ('Admin', 'Admin'),
-        ('HR', 'HR'),
-        ('Manager', 'Manager'),
-        ('Staff', 'Staff'),
+        ("HR", "HR"),
+        ("Manager", "Manager"),
+        ("Staff", "Staff"),
     )
 
     STATUS_CHOICES = (
-        ('Active', 'Active'),
-        ('Promoted', 'Promoted'),
-        ('Terminated', 'Terminated'),
+        ("Active", "Active"),
+        ("Promoted", "Promoted"),
+        ("Terminated", "Terminated"),
     )
 
     email = models.EmailField(unique=True)
+
     role = models.CharField(
         max_length=20,
         choices=ROLE_CHOICES,
-        default='Staff'
+        default="Staff"
     )
+
     department = models.ForeignKey(
         Department,
         on_delete=models.SET_NULL,
         null=True,
         blank=True
     )
+
     job_title = models.ForeignKey(
         JobTitle,
         on_delete=models.SET_NULL,
         null=True,
         blank=True
     )
+
     manager = models.ForeignKey(
-        'self',
+        "self",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name='subordinates'
+        related_name="subordinates"
     )
+
     hire_date = models.DateField(
         null=True,
         blank=True
     )
+
     status = models.CharField(
         max_length=20,
         choices=STATUS_CHOICES,
-        default='Active'
+        default="Active"
     )
+
     created_at = models.DateTimeField(auto_now_add=True)
 
-    USERNAME_FIELD = 'email'
-    REQUIRED_FIELDS = ['username', 'first_name', 'last_name']
-
-    def save(self, *args, **kwargs):
-        if self.is_superuser:
-            self.role = "Admin"
-        super().save(*args, **kwargs)
+    USERNAME_FIELD = "email"
+    REQUIRED_FIELDS = ["username", "first_name", "last_name"]
 
     def __str__(self):
         return f"{self.first_name} {self.last_name}"
@@ -98,130 +102,185 @@ class Employee(AbstractUser):
 # 4. PERFORMANCE APPRAISAL
 # ==========================
 class Appraisal(models.Model):
+
     employee = models.ForeignKey(
-        Employee, 
-        on_delete=models.CASCADE, 
-        related_name='appraisals'
+        Employee,
+        on_delete=models.CASCADE,
+        related_name="appraisals"
     )
+
     evaluator = models.ForeignKey(
-        Employee, 
-        on_delete=models.CASCADE, 
-        related_name='evaluated_appraisals'
-    )  # Usually a Manager
+        Employee,
+        on_delete=models.CASCADE,
+        related_name="evaluated_appraisals"
+    )
+
     appraisal_year = models.PositiveIntegerField()
+
     score = models.DecimalField(
-        max_digits=5, 
+        max_digits=5,
         decimal_places=2
     )
-    comments = models.TextField(blank=True, null=True)
+
+    comments = models.TextField(
+        blank=True,
+        null=True
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"Appraisal {self.appraisal_year}: {self.employee.last_name} - Score: {self.score}"
+        return f"{self.employee} ({self.appraisal_year})"
 
 
 # ==========================
 # 5. PROMOTION APPLICATION
 # ==========================
 class PromotionApplication(models.Model):
+
     STATUS_CHOICES = (
-        ('Pending', 'Pending'),
-        ('Recommended', 'Recommended'),
-        ('Verified', 'Verified'),
-        ('Approved', 'Approved'),
-        ('Rejected', 'Rejected'),
+        ("Pending", "Pending"),
+        ("Recommended", "Recommended"),
+        ("Verified", "Verified"),
+        ("Approved", "Approved"),
+        ("Rejected", "Rejected"),
     )
 
     employee = models.ForeignKey(
-        Employee, 
-        on_delete=models.CASCADE, 
-        related_name='applications'
+        Employee,
+        on_delete=models.CASCADE,
+        related_name="applications"
     )
+
     current_title = models.ForeignKey(
-        JobTitle, 
-        on_delete=models.CASCADE, 
-        related_name='current_applications'
+        JobTitle,
+        on_delete=models.CASCADE,
+        related_name="current_applications"
     )
+
     targeted_title = models.ForeignKey(
-        JobTitle, 
-        on_delete=models.CASCADE, 
-        related_name='target_applications'
+        JobTitle,
+        on_delete=models.CASCADE,
+        related_name="target_applications"
     )
-    attachments = models.FileField(
-        upload_to='promotion_documents/', 
-        blank=True, 
+
+    # ==========================
+    # REQUIRED PDF DOCUMENTS
+    # ==========================
+
+    cv = models.FileField(
+        upload_to="promotion_documents/cv/",
+        validators=[FileExtensionValidator(["pdf"])]
+    )
+
+    application_form = models.FileField(
+        upload_to="promotion_documents/application_forms/",
+        validators=[FileExtensionValidator(["pdf"])]
+    )
+
+    checkpoint_form = models.FileField(
+        upload_to="promotion_documents/checkpoint_forms/",
+        validators=[FileExtensionValidator(["pdf"])]
+    )
+
+    manager_status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default="Pending"
+    )
+
+    manager_comments = models.TextField(
+        blank=True,
         null=True
     )
-    
-    # Workflow Status Tracks
-    manager_status = models.CharField(
-        max_length=20, 
-        choices=STATUS_CHOICES, 
-        default='Pending'
-    )
-    manager_comments = models.TextField(blank=True, null=True)
-    
+
     hr_status = models.CharField(
-        max_length=20, 
-        choices=STATUS_CHOICES, 
-        default='Pending'
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default="Pending"
     )
-    hr_comments = models.TextField(blank=True, null=True)
-    
+
+    hr_comments = models.TextField(
+        blank=True,
+        null=True
+    )
+
     final_status = models.CharField(
-        max_length=20, 
-        choices=STATUS_CHOICES, 
-        default='Pending'
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default="Pending"
     )
+
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"Application: {self.employee.last_name} to {self.targeted_title.title_name}"
+        return (
+            f"{self.employee.first_name} "
+            f"{self.employee.last_name} -> "
+            f"{self.targeted_title.title_name}"
+        )
 
 
 # ==========================
 # 6. PROMOTION HISTORY
 # ==========================
 class PromotionHistory(models.Model):
+
     employee = models.ForeignKey(
-        Employee, 
-        on_delete=models.CASCADE, 
-        related_name='promotion_histories'
+        Employee,
+        on_delete=models.CASCADE,
+        related_name="promotion_histories"
     )
+
     old_title = models.ForeignKey(
-        JobTitle, 
-        on_delete=models.CASCADE, 
-        related_name='old_promotions'
+        JobTitle,
+        on_delete=models.CASCADE,
+        related_name="old_promotions"
     )
+
     new_title = models.ForeignKey(
-        JobTitle, 
-        on_delete=models.CASCADE, 
-        related_name='new_promotions'
+        JobTitle,
+        on_delete=models.CASCADE,
+        related_name="new_promotions"
     )
+
     approval_date = models.DateField(auto_now_add=True)
+
     letter = models.FileField(
-        upload_to='promotion_letters/', 
-        blank=True, 
+        upload_to="promotion_letters/",
+        blank=True,
         null=True
     )
+
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"History: {self.employee.last_name} promoted to {self.new_title.title_name}"
+        return (
+            f"{self.employee.first_name} "
+            f"{self.employee.last_name} "
+            f"-> {self.new_title.title_name}"
+        )
 
 
 # ==========================
-# 7. SYSTEM AUDIT LOG
+# 7. SYSTEM LOG
 # ==========================
 class SystemLog(models.Model):
+
     user = models.ForeignKey(
-        Employee, 
-        on_delete=models.SET_NULL, 
-        null=True, 
+        Employee,
+        on_delete=models.SET_NULL,
+        null=True,
         blank=True
     )
+
     action = models.CharField(max_length=255)
-    ip_address = models.GenericIPAddressField(blank=True, null=True)
+
+    ip_address = models.GenericIPAddressField(
+        blank=True,
+        null=True
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
