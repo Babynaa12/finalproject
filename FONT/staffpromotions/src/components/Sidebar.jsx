@@ -1,5 +1,6 @@
 import "../styles/Sidebar.css";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+
 import {
   FaHome,
   FaUserPlus,
@@ -11,96 +12,430 @@ import {
   FaChartBar,
   FaClipboardList,
   FaClipboardCheck,
-  FaCrown,
-  FaSignOutAlt
+  FaGraduationCap,
+  FaUniversity,
+  FaSearch,
+  FaSignOutAlt,
+  FaFileAlt,
+  FaChalkboardTeacher,
 } from "react-icons/fa";
 
+
 function Sidebar() {
+
   const location = useLocation();
   const navigate = useNavigate();
 
-  const user = JSON.parse(localStorage.getItem("user"));
-  const role = user?.role?.toLowerCase();
+  // ============================================================
+  // GET LOGGED-IN USER
+  // ============================================================
+
+  let user = null;
+
+  try {
+    user = JSON.parse(localStorage.getItem("user"));
+  } catch (error) {
+    user = null;
+  }
+
+  const role = String(user?.role || "")
+    .trim()
+    .toUpperCase();
+
+
+  // ============================================================
+  // MENU ITEMS
+  // ============================================================
 
   const menuItems = {
-    staff: [
-      { path: "/staff/dashboard", label: "Dashboard", icon: <FaHome /> },
-      { path: "/staff/apply", label: "Apply Promotion", icon: <FaUserPlus /> },
-      { path: "/staff/my-applications", label: "My Applications", icon: <FaFolderOpen /> },
-      { path: "/staff/history", label: "History", icon: <FaHistory /> },
-      { path: "/staff/notifications", label: "Notifications", icon: <FaBell /> },
-      { path: "/staff/profile", label: "Profile", icon: <FaUser /> },
+
+    // ==========================================================
+    // STAFF
+    // ==========================================================
+
+    STAFF: [
+
+      {
+        path: "/staff/dashboard",
+        label: "Dashboard",
+        icon: <FaHome />,
+      },
+
+      {
+        path: "/staff/apply",
+        label: "Apply Promotion",
+        icon: <FaUserPlus />,
+      },
+
+      {
+        path: "/staff/my-applications",
+        label: "My Applications",
+        icon: <FaFolderOpen />,
+      },
+
+      {
+        path: "/staff/history",
+        label: "Promotion History",
+        icon: <FaHistory />,
+      },
+
+      {
+        path: "/staff/appeals",
+        label: "Appeals",
+        icon: <FaFileAlt />,
+      },
+
+      {
+        path: "/staff/notifications",
+        label: "Notifications",
+        icon: <FaBell />,
+      },
+
+      {
+        path: "/staff/profile",
+        label: "Profile",
+        icon: <FaUser />,
+      },
+
     ],
 
-    manager: [
-      { path: "/manager/dashboard", label: "Dashboard", icon: <FaHome /> },
-      { path: "/manager/employees", label: "Employees", icon: <FaUsers /> },
-      { path: "/manager/appraisals", label: "Appraisals", icon: <FaClipboardCheck /> },
-      { path: "/manager/reviews", label: "Reviews", icon: <FaClipboardList /> },
-      { path: "/manager/reports", label: "Reports", icon: <FaChartBar /> },
+
+    // ==========================================================
+    // STUDENT
+    // ==========================================================
+
+    STUDENT: [
+
+      {
+        path: "/student/dashboard",
+        label: "Dashboard",
+        icon: <FaHome />,
+      },
+
+      {
+        path: "/student/teaching-evaluation",
+        label: "Teaching Evaluation",
+        icon: <FaChalkboardTeacher />,
+      },
+
+      {
+        path: "/student/evaluation-history",
+        label: "Evaluation History",
+        icon: <FaHistory />,
+      },
+
+      {
+        path: "/student/profile",
+        label: "Profile",
+        icon: <FaUser />,
+      },
+
     ],
 
-    hr: [
-      { path: "/hr/dashboard", label: "Dashboard", icon: <FaCrown /> },
-      { path: "/hr/employees", label: "Employees", icon: <FaUsers /> },
-      { path: "/hr/applications", label: "Applications", icon: <FaFolderOpen /> },
-      { path: "/hr/reports", label: "Reports", icon: <FaChartBar /> },
-      { path: "/hr/notifications", label: "Notifications", icon: <FaBell /> },
-      { path: "/hr/history", label: "Promotion History", icon: <FaHistory /> },
+
+    // ==========================================================
+    // HOD
+    // ==========================================================
+
+    HOD: [
+
+      {
+        path: "/hod/dashboard",
+        label: "Dashboard",
+        icon: <FaHome />,
+      },
+
+      {
+        path: "/hod/applications",
+        label: "Applications",
+        icon: <FaFolderOpen />,
+      },
+
+      {
+        path: "/hod/reviews",
+        label: "Reviews",
+        icon: <FaClipboardCheck />,
+      },
+
+      {
+        path: "/hod/employees",
+        label: "Employees",
+        icon: <FaUsers />,
+      },
+
+      {
+        path: "/hod/reports",
+        label: "Reports",
+        icon: <FaChartBar />,
+      },
+
     ],
+
+
+    // ==========================================================
+    // DEAN
+    // ==========================================================
+
+    DEAN: [
+
+      {
+        path: "/dean/dashboard",
+        label: "Dashboard",
+        icon: <FaHome />,
+      },
+
+      {
+        path: "/dean/applications",
+        label: "Applications",
+        icon: <FaFolderOpen />,
+      },
+
+      {
+        path: "/dean/reviews",
+        label: "Reviews",
+        icon: <FaClipboardCheck />,
+      },
+
+      {
+        path: "/dean/reports",
+        label: "Reports",
+        icon: <FaChartBar />,
+      },
+
+    ],
+
+
+    // ==========================================================
+    // REVIEWER
+    // ==========================================================
+
+    REVIEWER: [
+
+      {
+        path: "/reviewer/dashboard",
+        label: "Dashboard",
+        icon: <FaHome />,
+      },
+
+      {
+        path: "/reviewer/assigned-reviews",
+        label: "Assigned Reviews",
+        icon: <FaClipboardList />,
+      },
+
+      {
+        path: "/reviewer/completed-reviews",
+        label: "Completed Reviews",
+        icon: <FaHistory />,
+      },
+
+      {
+        path: "/reviewer/profile",
+        label: "Profile",
+        icon: <FaUser />,
+      },
+
+    ],
+
   };
 
-  // =========================
-  // LOGOUT FUNCTION
-  // =========================
+
+  // ============================================================
+  // LOGOUT
+  // ============================================================
+
   const handleLogout = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
 
-    navigate("/login");
+    localStorage.removeItem("token");
+    localStorage.removeItem("access_token");
+    localStorage.removeItem("refresh_token");
+    localStorage.removeItem("user");
+    localStorage.removeItem("role");
+
+    navigate("/login", {
+      replace: true,
+    });
+
   };
+
+
+  // ============================================================
+  // ROLE NAME
+  // ============================================================
+
+  const roleNames = {
+
+    STAFF: "Academic Staff",
+
+    STUDENT: "Student",
+
+    HOD: "Head of Department",
+
+    DEAN: "Dean",
+
+    REVIEWER: "Reviewer",
+
+  };
+
+
+  // ============================================================
+  // CURRENT MENU
+  // ============================================================
+
+  const currentMenu = menuItems[role] || [];
+
+
+  // ============================================================
+  // SIDEBAR
+  // ============================================================
 
   return (
-    <div className="sidebar">
 
-      {/* HEADER */}
+    <aside className="sidebar">
+
+      {/* ======================================================
+          HEADER
+      ====================================================== */}
+
       <div className="sidebar-header">
-        <h2>Promotion System</h2>
-        <p className="role-badge">{role}</p>
+
+        <div className="sidebar-logo-icon">
+          <FaUniversity />
+        </div>
+
+        <div>
+
+          <h2>
+            Promotion System
+          </h2>
+
+          <p className="role-badge">
+            {roleNames[role] || role || "User"}
+          </p>
+
+        </div>
+
       </div>
 
-      {/* MENU */}
-      <ul className="sidebar-menu">
-        {menuItems[role]?.map((item) => (
-          <li key={item.path}>
-            <Link
-              to={item.path}
-              className={
-                location.pathname === item.path
-                  ? "sidebar-link active"
-                  : "sidebar-link"
-              }
-            >
-              <span className="icon">{item.icon}</span>
-              <span>{item.label}</span>
-            </Link>
-          </li>
-        ))}
-      </ul>
 
-      {/* LOGOUT SECTION */}
+      {/* ======================================================
+          USER INFORMATION
+      ====================================================== */}
+
+      <div className="sidebar-user">
+
+        <div className="user-avatar">
+          {user?.first_name?.charAt(0)?.toUpperCase() ||
+            user?.username?.charAt(0)?.toUpperCase() ||
+            "U"}
+        </div>
+
+        <div className="user-info">
+
+          <strong>
+            {user?.name ||
+              `${user?.first_name || ""} ${user?.last_name || ""}`.trim() ||
+              user?.username ||
+              "User"}
+          </strong>
+
+          <span>
+            {roleNames[role] || role}
+          </span>
+
+        </div>
+
+      </div>
+
+
+      {/* ======================================================
+          NAVIGATION
+      ====================================================== */}
+
+      <nav className="sidebar-navigation">
+
+        <p className="menu-title">
+          MAIN MENU
+        </p>
+
+        <ul className="sidebar-menu">
+
+          {currentMenu.map((item) => (
+
+            <li key={item.path}>
+
+              <Link
+                to={item.path}
+                className={
+                  location.pathname === item.path ||
+                  location.pathname.startsWith(`${item.path}/`)
+                    ? "sidebar-link active"
+                    : "sidebar-link"
+                }
+              >
+
+                <span className="icon">
+                  {item.icon}
+                </span>
+
+                <span className="link-label">
+                  {item.label}
+                </span>
+
+              </Link>
+
+            </li>
+
+          ))}
+
+        </ul>
+
+      </nav>
+
+
+      {/* ======================================================
+          LOGOUT
+      ====================================================== */}
+
       <div className="logout-section">
-        <button className="logout-btn" onClick={handleLogout}>
+
+        <button
+          className="logout-btn"
+          onClick={handleLogout}
+        >
+
           <FaSignOutAlt />
-          Logout
+
+          <span>
+            Logout
+          </span>
+
         </button>
+
       </div>
+
+
+      {/* ======================================================
+          NO ROLE
+      ====================================================== */}
 
       {!menuItems[role] && (
-        <p className="no-role">No menu for role: {role}</p>
+
+        <div className="no-role">
+
+          <p>
+            No menu available for this role.
+          </p>
+
+        </div>
+
       )}
-    </div>
+
+    </aside>
+
   );
+
 }
+
 
 export default Sidebar;

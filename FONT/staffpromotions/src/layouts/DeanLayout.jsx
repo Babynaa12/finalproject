@@ -2,7 +2,7 @@ import Sidebar from "../components/Sidebar";
 import Navbar from "../components/Navbar";
 import "../styles/Dashboard.css";
 
-function StaffLayout({ children }) {
+function DeanLayout({ children }) {
   return (
     <div className="dashboard">
 
@@ -22,4 +22,4 @@ function StaffLayout({ children }) {
   );
 }
 
-export default StaffLayout;
+export default DeanLayout;

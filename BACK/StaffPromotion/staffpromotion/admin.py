@@ -38,6 +38,10 @@ class DepartmentAdmin(admin.ModelAdmin):
         "department_name",
     )
 
+    readonly_fields = (
+        "created_at",
+    )
+
 
 # ============================================================
 # 2. JOB TITLE / ACADEMIC RANK
@@ -55,17 +59,21 @@ class JobTitleAdmin(admin.ModelAdmin):
         "created_at",
     )
 
+    list_filter = (
+        "salary_scale",
+    )
+
     search_fields = (
         "title_name",
         "salary_scale",
     )
 
-    list_filter = (
-        "salary_scale",
-    )
-
     ordering = (
         "title_name",
+    )
+
+    readonly_fields = (
+        "created_at",
     )
 
 
@@ -97,6 +105,7 @@ class EmployeeAdmin(BaseUserAdmin):
         "job_title",
         "is_staff",
         "is_superuser",
+        "is_active",
     )
 
     search_fields = (
@@ -111,22 +120,41 @@ class EmployeeAdmin(BaseUserAdmin):
         "email",
     )
 
+    # --------------------------------------------------------
+    # IMPORTANT:
+    # created_at and updated_at are non-editable fields.
+    # They MUST be readonly.
+    # --------------------------------------------------------
+
+    readonly_fields = (
+        "last_login",
+        "date_joined",
+        "created_at",
+        "updated_at",
+    )
+
     fieldsets = (
+        # ----------------------------------------------------
+        # LOGIN
+        # ----------------------------------------------------
         (
-            None,
+            "Login Information",
             {
                 "fields": (
+                    "username",
                     "email",
                     "password",
                 )
             },
         ),
 
+        # ----------------------------------------------------
+        # PERSONAL INFORMATION
+        # ----------------------------------------------------
         (
             "Personal Information",
             {
                 "fields": (
-                    "username",
                     "first_name",
                     "last_name",
                     "phone_number",
@@ -138,6 +166,9 @@ class EmployeeAdmin(BaseUserAdmin):
             },
         ),
 
+        # ----------------------------------------------------
+        # SYSTEM ROLE
+        # ----------------------------------------------------
         (
             "System Role",
             {
@@ -148,6 +179,9 @@ class EmployeeAdmin(BaseUserAdmin):
             },
         ),
 
+        # ----------------------------------------------------
+        # ORGANIZATION
+        # ----------------------------------------------------
         (
             "Organization Information",
             {
@@ -159,6 +193,9 @@ class EmployeeAdmin(BaseUserAdmin):
             },
         ),
 
+        # ----------------------------------------------------
+        # EMPLOYMENT
+        # ----------------------------------------------------
         (
             "Employment Information",
             {
@@ -171,6 +208,9 @@ class EmployeeAdmin(BaseUserAdmin):
             },
         ),
 
+        # ----------------------------------------------------
+        # PERMISSIONS
+        # ----------------------------------------------------
         (
             "Permissions",
             {
@@ -184,8 +224,11 @@ class EmployeeAdmin(BaseUserAdmin):
             },
         ),
 
+        # ----------------------------------------------------
+        # SYSTEM DATES
+        # ----------------------------------------------------
         (
-            "Important Dates",
+            "System Dates",
             {
                 "fields": (
                     "last_login",
@@ -199,20 +242,20 @@ class EmployeeAdmin(BaseUserAdmin):
 
     add_fieldsets = (
         (
-            None,
+            "Create Employee",
             {
                 "classes": ("wide",),
                 "fields": (
-                    "email",
                     "username",
+                    "email",
                     "first_name",
                     "last_name",
                     "password1",
                     "password2",
                     "role",
+                    "status",
                     "department",
                     "job_title",
-                    "status",
                 ),
             },
         ),
@@ -731,4 +774,5 @@ class ReviewerAssignmentAdmin(admin.ModelAdmin):
 
     readonly_fields = (
         "assigned_at",
+        "completed_at",
     )

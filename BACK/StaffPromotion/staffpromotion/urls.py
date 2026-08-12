@@ -18,7 +18,7 @@ urlpatterns = [
 
     path(
         "auth/login/",
-        views.MyTokenObtainPairView.as_view(),
+        views.login_user,
         name="auth_login"
     ),
 
@@ -270,4 +270,5 @@ urlpatterns = [
         views.manage_system_logs_detail,
         name="system_logs_detail"
     ),
+
 ]

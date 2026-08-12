@@ -107,44 +107,106 @@ def register_user(request):
     )
 
 
-# ============================================================
-# LOGIN
-# ============================================================
+from django.contrib.auth import authenticate
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import AllowAny
+from rest_framework.response import Response
+from rest_framework import status
+from rest_framework_simplejwt.tokens import RefreshToken
+
 
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def login_user(request):
 
-    username_or_email = request.data.get("username")
+    # Accept either:
+    # {
+    #     "username": "...",
+    #     "password": "..."
+    # }
+    #
+    # OR
+    #
+    # {
+    #     "email": "...",
+    #     "password": "..."
+    # }
+
+    username = request.data.get("username")
+    email = request.data.get("email")
     password = request.data.get("password")
 
-    if not username_or_email or not password:
+    # ---------------------------------------------
+    # VALIDATE PASSWORD
+    # ---------------------------------------------
 
+    if not password:
         return Response(
             {
-                "error":
-                "Username/Email and password are required"
+                "error": "Password is required"
             },
             status=status.HTTP_400_BAD_REQUEST
         )
 
+    # ---------------------------------------------
+    # FIND LOGIN IDENTIFIER
+    # ---------------------------------------------
+
+    if email:
+        try:
+            user = Employee.objects.get(email__iexact=email)
+        except Employee.DoesNotExist:
+            return Response(
+                {
+                    "error": "Invalid email or password"
+                },
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+        username = user.username
+
+    elif username:
+        try:
+            user = Employee.objects.get(username=username)
+        except Employee.DoesNotExist:
+            return Response(
+                {
+                    "error": "Invalid username or password"
+                },
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+    else:
+        return Response(
+            {
+                "error": "Username or email is required"
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # ---------------------------------------------
+    # AUTHENTICATE PASSWORD
+    # ---------------------------------------------
+
     user = authenticate(
         request,
-        username=username_or_email,
+        username=username,
         password=password
     )
 
     if user is None:
-
         return Response(
             {
-                "error": "Invalid credentials"
+                "error": "Invalid username/email or password"
             },
             status=status.HTTP_401_UNAUTHORIZED
         )
 
-    if not user.is_active:
+    # ---------------------------------------------
+    # CHECK ACCOUNT STATUS
+    # ---------------------------------------------
 
+    if not user.is_active:
         return Response(
             {
                 "error": "Your account is inactive"
@@ -152,7 +214,15 @@ def login_user(request):
             status=status.HTTP_403_FORBIDDEN
         )
 
+    # ---------------------------------------------
+    # JWT TOKEN
+    # ---------------------------------------------
+
     refresh = RefreshToken.for_user(user)
+
+    # ---------------------------------------------
+    # SYSTEM LOG
+    # ---------------------------------------------
 
     create_system_log(
         user,
@@ -161,30 +231,89 @@ def login_user(request):
         request
     )
 
+    # ---------------------------------------------
+    # USER DATA
+    # ---------------------------------------------
+
+    user_data = {
+        "id": user.id,
+        "email": user.email,
+        "username": user.username,
+
+        "first_name": user.first_name,
+        "last_name": user.last_name,
+
+        "name": f"{user.first_name} {user.last_name}".strip(),
+
+        "role": user.role,
+
+        "department": (
+            user.department.department_name
+            if user.department
+            else None
+        ),
+
+        "job_title": (
+            user.job_title.title_name
+            if user.job_title
+            else None
+        ),
+    }
+
+    # ---------------------------------------------
+    # RESPONSE
+    # ---------------------------------------------
+
     return Response(
         {
+            "success": True,
+
             "refresh": str(refresh),
+
             "access": str(refresh.access_token),
 
-            "user": {
-                "id": user.id,
-                "email": user.email,
-                "username": user.username,
-                "role": user.role,
-                "name":
-                    f"{user.first_name} {user.last_name}",
-                "department":
-                    user.department.department_name
-                    if user.department else None,
-                "job_title":
-                    user.job_title.title_name
-                    if user.job_title else None,
-            }
+            "user": user_data
         },
         status=status.HTTP_200_OK
     )
 
+    # ==========================================
+    # USER INFORMATION
+    # ==========================================
 
+    user_data = {
+        "id": user.id,
+        "email": user.email,
+        "username": user.username,
+        "first_name": user.first_name,
+        "last_name": user.last_name,
+        "name": f"{user.first_name} {user.last_name}".strip(),
+
+        "role": role,
+
+        "department": (
+            user.department.department_name
+            if user.department else None
+        ),
+
+        "job_title": (
+            user.job_title.title_name
+            if user.job_title else None
+        ),
+    }
+
+    # ==========================================
+    # RESPONSE
+    # ==========================================
+
+    return Response(
+        {
+            "refresh": str(refresh),
+            "access": str(refresh.access_token),
+            "user": user_data
+        },
+        status=status.HTTP_200_OK
+    )
 # ============================================================
 # CURRENT USER PROFILE
 # ============================================================
