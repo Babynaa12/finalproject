@@ -12,17 +12,12 @@ import {
   FaChartBar,
   FaClipboardList,
   FaClipboardCheck,
-  FaGraduationCap,
-  FaUniversity,
-  FaSearch,
   FaSignOutAlt,
   FaFileAlt,
   FaChalkboardTeacher,
 } from "react-icons/fa";
 
-
 function Sidebar() {
-
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -33,15 +28,39 @@ function Sidebar() {
   let user = null;
 
   try {
-    user = JSON.parse(localStorage.getItem("user"));
+    const storedUser = localStorage.getItem("user");
+
+    if (storedUser) {
+      user = JSON.parse(storedUser);
+    }
   } catch (error) {
+    console.error("Invalid user data:", error);
     user = null;
   }
 
-  const role = String(user?.role || "")
+  // ============================================================
+  // GET ROLE
+  // ============================================================
+
+  const role = String(
+    user?.role ||
+      localStorage.getItem("role") ||
+      ""
+  )
     .trim()
     .toUpperCase();
 
+  // ============================================================
+  // ROLE NAMES
+  // ============================================================
+
+  const roleNames = {
+    STAFF: "Academic Staff",
+    STUDENT: "Student",
+    HOD: "Head of Department",
+    DEAN: "Dean",
+    REVIEWER: "Reviewer",
+  };
 
   // ============================================================
   // MENU ITEMS
@@ -54,7 +73,6 @@ function Sidebar() {
     // ==========================================================
 
     STAFF: [
-
       {
         path: "/staff/dashboard",
         label: "Dashboard",
@@ -86,6 +104,24 @@ function Sidebar() {
       },
 
       {
+        path: "/staff/peer-reviews",
+        label: "Peer Reviews",
+        icon: <FaClipboardCheck />,
+      },
+
+      {
+        path: "/staff/promotion-material",
+        label: "Promotion Material",
+        icon: <FaFileAlt />,
+      },
+
+      {
+        path: "/staff/student-evaluations",
+        label: "Student Evaluations",
+        icon: <FaChalkboardTeacher />,
+      },
+
+      {
         path: "/staff/notifications",
         label: "Notifications",
         icon: <FaBell />,
@@ -96,16 +132,13 @@ function Sidebar() {
         label: "Profile",
         icon: <FaUser />,
       },
-
     ],
-
 
     // ==========================================================
     // STUDENT
     // ==========================================================
 
     STUDENT: [
-
       {
         path: "/student/dashboard",
         label: "Dashboard",
@@ -113,7 +146,7 @@ function Sidebar() {
       },
 
       {
-        path: "/student/teaching-evaluation",
+        path: "/student/teaching-evaluations",
         label: "Teaching Evaluation",
         icon: <FaChalkboardTeacher />,
       },
@@ -129,16 +162,13 @@ function Sidebar() {
         label: "Profile",
         icon: <FaUser />,
       },
-
     ],
-
 
     // ==========================================================
     // HOD
     // ==========================================================
 
     HOD: [
-
       {
         path: "/hod/dashboard",
         label: "Dashboard",
@@ -169,15 +199,18 @@ function Sidebar() {
         icon: <FaChartBar />,
       },
 
+      {
+        path: "/hod/history",
+        label: "History",
+        icon: <FaHistory />,
+      },
     ],
-
 
     // ==========================================================
     // DEAN
     // ==========================================================
 
     DEAN: [
-
       {
         path: "/dean/dashboard",
         label: "Dashboard",
@@ -202,15 +235,18 @@ function Sidebar() {
         icon: <FaChartBar />,
       },
 
+      {
+        path: "/dean/history",
+        label: "History",
+        icon: <FaHistory />,
+      },
     ],
-
 
     // ==========================================================
     // REVIEWER
     // ==========================================================
 
     REVIEWER: [
-
       {
         path: "/reviewer/dashboard",
         label: "Dashboard",
@@ -234,18 +270,31 @@ function Sidebar() {
         label: "Profile",
         icon: <FaUser />,
       },
-
     ],
-
   };
 
+  // ============================================================
+  // CURRENT MENU
+  // ============================================================
+
+  const currentMenu = menuItems[role] || [];
+
+  // ============================================================
+  // CHECK ACTIVE LINK
+  // ============================================================
+
+  const isActive = (path) => {
+    return (
+      location.pathname === path ||
+      location.pathname.startsWith(`${path}/`)
+    );
+  };
 
   // ============================================================
   // LOGOUT
   // ============================================================
 
   const handleLogout = () => {
-
     localStorage.removeItem("token");
     localStorage.removeItem("access_token");
     localStorage.removeItem("refresh_token");
@@ -255,86 +304,52 @@ function Sidebar() {
     navigate("/login", {
       replace: true,
     });
-
   };
-
-
-  // ============================================================
-  // ROLE NAME
-  // ============================================================
-
-  const roleNames = {
-
-    STAFF: "Academic Staff",
-
-    STUDENT: "Student",
-
-    HOD: "Head of Department",
-
-    DEAN: "Dean",
-
-    REVIEWER: "Reviewer",
-
-  };
-
-
-  // ============================================================
-  // CURRENT MENU
-  // ============================================================
-
-  const currentMenu = menuItems[role] || [];
-
 
   // ============================================================
   // SIDEBAR
   // ============================================================
 
   return (
-
     <aside className="sidebar">
 
       {/* ======================================================
           HEADER
       ====================================================== */}
-
+{/* 
       <div className="sidebar-header">
 
-        <div className="sidebar-logo-icon">
-          <FaUniversity />
-        </div>
-
         <div>
-
-          <h2>
-            Promotion System
-          </h2>
+          <h2>Promotion System</h2>
 
           <p className="role-badge">
-            {roleNames[role] || role || "User"}
+            {roleNames[role] || "User"}
           </p>
-
         </div>
 
-      </div>
-
+      </div> */}
 
       {/* ======================================================
           USER INFORMATION
       ====================================================== */}
 
-      <div className="sidebar-user">
+      {/* <div className="sidebar-user">
 
         <div className="user-avatar">
+
           {user?.first_name?.charAt(0)?.toUpperCase() ||
             user?.username?.charAt(0)?.toUpperCase() ||
             "U"}
+
         </div>
 
         <div className="user-info">
 
           <strong>
-            {user?.name ||
-              `${user?.first_name || ""} ${user?.last_name || ""}`.trim() ||
+            {user?.full_name ||
+              `${user?.first_name || ""} ${
+                user?.last_name || ""
+              }`.trim() ||
               user?.username ||
               "User"}
           </strong>
@@ -345,8 +360,7 @@ function Sidebar() {
 
         </div>
 
-      </div>
-
+      </div> */}
 
       {/* ======================================================
           NAVIGATION
@@ -367,8 +381,7 @@ function Sidebar() {
               <Link
                 to={item.path}
                 className={
-                  location.pathname === item.path ||
-                  location.pathname.startsWith(`${item.path}/`)
+                  isActive(item.path)
                     ? "sidebar-link active"
                     : "sidebar-link"
                 }
@@ -392,7 +405,6 @@ function Sidebar() {
 
       </nav>
 
-
       {/* ======================================================
           LOGOUT
       ====================================================== */}
@@ -414,7 +426,6 @@ function Sidebar() {
 
       </div>
 
-
       {/* ======================================================
           NO ROLE
       ====================================================== */}
@@ -432,10 +443,7 @@ function Sidebar() {
       )}
 
     </aside>
-
   );
-
 }
-
 
 export default Sidebar;

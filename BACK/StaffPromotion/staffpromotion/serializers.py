@@ -387,40 +387,138 @@ class PromotionApplicationSerializer(
 
 # ============================================================
 # 8. PROMOTION MATERIAL
-# APPENDIX 3 - CHECKLIST
+# APPENDIX 3 - PROMOTION CHECKLIST
 # ============================================================
 
-class PromotionMaterialSerializer(
-    serializers.ModelSerializer
-):
+class PromotionMaterialSerializer(serializers.ModelSerializer):
 
-    application_employee = serializers.SerializerMethodField()
+    # --------------------------------------------------------
+    # Display material type
+    # --------------------------------------------------------
 
     material_type_display = serializers.CharField(
         source="get_material_type_display",
         read_only=True
     )
 
+    # --------------------------------------------------------
+    # Employee who owns the application
+    # --------------------------------------------------------
+
+    employee_name = serializers.SerializerMethodField()
+
+    # --------------------------------------------------------
+    # Application information
+    # --------------------------------------------------------
+
+    application_status = serializers.CharField(
+        source="application.status",
+        read_only=True
+    )
+
+    # --------------------------------------------------------
+    # Reviewer display
+    # --------------------------------------------------------
+
+    reviewer_name = serializers.SerializerMethodField()
+
     class Meta:
         model = PromotionMaterial
 
-        fields = "__all__"
+        fields = [
+            "id",
 
-        read_only_fields = [
-            "created_at"
+            # =================================================
+            # APPLICATION
+            # =================================================
+            "application",
+            "application_status",
+
+            # =================================================
+            # EMPLOYEE
+            # =================================================
+            "employee_name",
+
+            # =================================================
+            # MATERIAL
+            # =================================================
+            "reference_in_cv",
+            "material_type",
+            "material_type_display",
+            "title",
+            "journal_title",
+            "authors",
+            "publication_year",
+            "indexing",
+
+            # =================================================
+            # REVIEWER
+            # =================================================
+            "reviewer_name",
+
+            # =================================================
+            # POINTS
+            # =================================================
+            "points",
+
+            # =================================================
+            # DOCUMENT
+            # =================================================
+            "document",
+
+            # =================================================
+            # SYSTEM DATE
+            # =================================================
+            "created_at",
         ]
 
-    def get_application_employee(self, obj):
+        read_only_fields = [
+            "id",
+            "application_status",
+            "employee_name",
+            "material_type_display",
+            "reviewer_name",
+            "points",
+            "created_at",
+        ]
 
-        if obj.application and obj.application.employee:
+    # ========================================================
+    # EMPLOYEE NAME
+    # ========================================================
+
+    def get_employee_name(self, obj):
+
+        if (
+            obj.application
+            and obj.application.employee
+        ):
+
+            employee = obj.application.employee
 
             return (
-                f"{obj.application.employee.first_name} "
-                f"{obj.application.employee.last_name}"
+                f"{employee.first_name} "
+                f"{employee.last_name}"
             ).strip()
 
         return None
 
+    # ========================================================
+    # REVIEWER NAME
+    # ========================================================
+
+    def get_reviewer_name(self, obj):
+
+        # If your PromotionMaterial model has a reviewer FK
+        # this will display the reviewer's name.
+
+        if hasattr(obj, "reviewer") and obj.reviewer:
+
+            return (
+                f"{obj.reviewer.first_name} "
+                f"{obj.reviewer.last_name}"
+            ).strip()
+
+        return None
 
 # ============================================================
 # 9. ACADEMIC MATERIAL REVIEW

@@ -1,54 +1,57 @@
 import { Navigate, useLocation } from "react-router-dom";
 
 function ProtectedRoute({ children, allowedRoles = [] }) {
-
   const location = useLocation();
 
   // ============================================================
-  // GET AUTHENTICATION DATA
+  // GET AUTH DATA
   // ============================================================
 
-  const token = localStorage.getItem("token");
-  const accessToken = localStorage.getItem("access_token");
-  const userData = localStorage.getItem("user");
+  const token =
+    localStorage.getItem("token") ||
+    localStorage.getItem("access_token");
+
+  const storedUser = localStorage.getItem("user");
+  const storedRole = localStorage.getItem("role");
 
   // ============================================================
-  // CHECK LOGIN
+  // DASHBOARDS
   // ============================================================
 
-  if (!token && !accessToken) {
+  const dashboards = {
+    STAFF: "/staff/dashboard",
+    STUDENT: "/student/dashboard",
+    HOD: "/hod/dashboard",
+    DEAN: "/dean/dashboard",
+    REVIEWER: "/reviewer/dashboard",
+  };
+
+  // ============================================================
+  // NOT LOGGED IN
+  // ============================================================
+
+  if (!token) {
     return (
       <Navigate
         to="/login"
         replace
-        state={{ from: location }}
+        state={{ from: location.pathname }}
       />
     );
   }
 
   // ============================================================
-  // GET USER
+  // READ USER
   // ============================================================
 
   let user = null;
 
-  try {
-    user = JSON.parse(userData);
-  } catch (error) {
-    console.error("Invalid user data:", error);
-
-    localStorage.removeItem("token");
-    localStorage.removeItem("access_token");
-    localStorage.removeItem("refresh_token");
-    localStorage.removeItem("user");
-    localStorage.removeItem("role");
-
-    return (
-      <Navigate
-        to="/login"
-        replace
-      />
-    );
+  if (storedUser) {
+    try {
+      user = JSON.parse(storedUser);
+    } catch (error) {
+      console.error("Invalid user JSON:", error);
+    }
   }
 
   // ============================================================
@@ -56,63 +59,86 @@ function ProtectedRoute({ children, allowedRoles = [] }) {
   // ============================================================
 
   const role = String(
-    user?.role || localStorage.getItem("role") || ""
+    user?.role ||
+      user?.user_role ||
+      user?.userRole ||
+      storedRole ||
+      ""
   )
     .trim()
     .toUpperCase();
 
   // ============================================================
-  // USER MUST HAVE ROLE
+  // ROLE NOT AVAILABLE
   // ============================================================
 
   if (!role) {
-
-    localStorage.removeItem("token");
-    localStorage.removeItem("access_token");
-    localStorage.removeItem("refresh_token");
-    localStorage.removeItem("user");
-    localStorage.removeItem("role");
+    console.error("Authenticated user has no role.");
 
     return (
-      <Navigate
-        to="/login"
-        replace
-      />
+      <div
+        style={{
+          padding: "40px",
+          textAlign: "center",
+          fontFamily: "Arial",
+        }}
+      >
+        <h2>Authorization Error</h2>
+
+        <p>
+          Your account is logged in, but no user role was found.
+        </p>
+
+        <p>
+          Please logout and login again.
+        </p>
+      </div>
     );
   }
 
   // ============================================================
-  // CHECK ROLE PERMISSION
+  // CHECK AUTHORIZATION
   // ============================================================
 
-  if (
-    allowedRoles.length > 0 &&
-    !allowedRoles.includes(role)
-  ) {
+  const normalizedAllowedRoles = allowedRoles.map((item) =>
+    String(item).trim().toUpperCase()
+  );
 
-    // ==========================================================
-    // SEND USER TO THEIR OWN DASHBOARD
-    // ==========================================================
+  const isAuthorized =
+    normalizedAllowedRoles.length === 0 ||
+    normalizedAllowedRoles.includes(role);
 
-    const dashboards = {
+  // ============================================================
+  // LOGGED IN BUT NOT AUTHORIZED
+  // ============================================================
 
-      STAFF: "/staff/dashboard",
+  if (!isAuthorized) {
+    const dashboard = dashboards[role];
 
-      STUDENT: "/student/dashboard",
-
-      HOD: "/hod/dashboard",
-
-      DEAN: "/dean/dashboard",
-
-      REVIEWER: "/reviewer/dashboard",
-
-    };
+    if (dashboard) {
+      return (
+        <Navigate
+          to={dashboard}
+          replace
+          state={{
+            unauthorized: true,
+            attemptedPath: location.pathname,
+          }}
+        />
+      );
+    }
 
     return (
-      <Navigate
-        to={dashboards[role] || "/login"}
-        replace
-      />
+      <div
+        style={{
+          padding: "40px",
+          textAlign: "center",
+          fontFamily: "Arial",
+        }}
+      >
+        <h2>Access Denied</h2>
+        <p>You are not authorized to access this page.</p>
+      </div>
     );
   }
 

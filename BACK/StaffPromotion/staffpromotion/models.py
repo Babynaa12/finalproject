@@ -1,7 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.core.validators import FileExtensionValidator
-from django.core.exceptions import ValidationError
+from decimal import Decimal
 
 
 # ============================================================
@@ -87,9 +87,9 @@ class Employee(AbstractUser):
         ("TERMINATED", "Terminated"),
     )
 
-    # --------------------------------------------------------
+    # ========================================================
     # PERSONAL INFORMATION
-    # --------------------------------------------------------
+    # ========================================================
 
     email = models.EmailField(
         unique=True
@@ -112,9 +112,9 @@ class Employee(AbstractUser):
         null=True
     )
 
-    # --------------------------------------------------------
+    # ========================================================
     # SYSTEM ROLE
-    # --------------------------------------------------------
+    # ========================================================
 
     role = models.CharField(
         max_length=30,
@@ -128,9 +128,9 @@ class Employee(AbstractUser):
         default="ACTIVE"
     )
 
-    # --------------------------------------------------------
-    # ORGANIZATION INFORMATION
-    # --------------------------------------------------------
+    # ========================================================
+    # ORGANIZATION
+    # ========================================================
 
     department = models.ForeignKey(
         Department,
@@ -156,9 +156,9 @@ class Employee(AbstractUser):
         related_name="subordinates"
     )
 
-    # --------------------------------------------------------
+    # ========================================================
     # EMPLOYMENT INFORMATION
-    # --------------------------------------------------------
+    # ========================================================
 
     appointment_date = models.DateField(
         blank=True,
@@ -184,9 +184,9 @@ class Employee(AbstractUser):
         null=True
     )
 
-    # --------------------------------------------------------
+    # ========================================================
     # PROFILE
-    # --------------------------------------------------------
+    # ========================================================
 
     profile_photo = models.ImageField(
         upload_to="profiles/",
@@ -216,15 +216,15 @@ class Employee(AbstractUser):
     ]
 
     def __str__(self):
-        return (
-            f"{self.first_name} "
-            f"{self.last_name}"
-        )
+        return f"{self.first_name} {self.last_name}".strip()
+
+    @property
+    def full_name(self):
+        return f"{self.first_name} {self.last_name}".strip()
 
 
 # ============================================================
 # 4. STUDENT TEACHING EVALUATION
-# Appendix 1
 # ============================================================
 
 class StudentTeachingEvaluation(models.Model):
@@ -293,10 +293,6 @@ class StudentTeachingEvaluation(models.Model):
         null=True
     )
 
-    # --------------------------------------------------------
-    # PART 1: STUDENT LEARNING
-    # --------------------------------------------------------
-
     course_outline_provided = models.CharField(
         max_length=3,
         choices=YES_NO_CHOICES,
@@ -352,41 +348,15 @@ class StudentTeachingEvaluation(models.Model):
         null=True
     )
 
-    provided_teaching_notes = models.BooleanField(
-        default=False
-    )
-
-    provided_handouts = models.BooleanField(
-        default=False
-    )
-
-    provided_articles = models.BooleanField(
-        default=False
-    )
-
-    provided_reference_materials = models.BooleanField(
-        default=False
-    )
-
-    provided_library_references = models.BooleanField(
-        default=False
-    )
-
-    gave_assignments = models.BooleanField(
-        default=False
-    )
-
-    provided_practicals = models.BooleanField(
-        default=False
-    )
-
-    assigned_seminars = models.BooleanField(
-        default=False
-    )
-
-    gave_tests = models.BooleanField(
-        default=False
-    )
+    provided_teaching_notes = models.BooleanField(default=False)
+    provided_handouts = models.BooleanField(default=False)
+    provided_articles = models.BooleanField(default=False)
+    provided_reference_materials = models.BooleanField(default=False)
+    provided_library_references = models.BooleanField(default=False)
+    gave_assignments = models.BooleanField(default=False)
+    provided_practicals = models.BooleanField(default=False)
+    assigned_seminars = models.BooleanField(default=False)
+    gave_tests = models.BooleanField(default=False)
 
     other_learning_method = models.TextField(
         blank=True,
@@ -415,10 +385,6 @@ class StudentTeachingEvaluation(models.Model):
         blank=True,
         null=True
     )
-
-    # --------------------------------------------------------
-    # PART 2: TEACHING AND CONTINUOUS ASSESSMENT
-    # --------------------------------------------------------
 
     organized_lectures_rating = models.PositiveSmallIntegerField(
         choices=RATING_CHOICES,
@@ -486,16 +452,11 @@ class StudentTeachingEvaluation(models.Model):
     )
 
     def __str__(self):
-        return (
-            f"{self.student} - "
-            f"{self.instructor} - "
-            f"{self.course_name}"
-        )
+        return f"{self.student} - {self.instructor} - {self.course_name}"
 
 
 # ============================================================
 # 5. PEER REVIEW
-# Appendix 2
 # ============================================================
 
 class PeerReview(models.Model):
@@ -506,14 +467,6 @@ class PeerReview(models.Model):
         ("B", "Good"),
         ("C", "Satisfactory"),
         ("D", "Poor"),
-    )
-
-    POINT_CHOICES = (
-        (2.0, "2.0"),
-        (1.5, "1.5"),
-        (1.0, "1.0"),
-        (0.5, "0.5"),
-        (0.0, "0.0"),
     )
 
     reviewer = models.ForeignKey(
@@ -565,51 +518,22 @@ class PeerReview(models.Model):
         null=True
     )
 
-    # --------------------------------------------------------
-    # AREAS WHERE STAFF IS DOING WELL
-    # --------------------------------------------------------
-
-    preparation_of_content = models.BooleanField(
-        default=False
-    )
-
-    delivery_of_subject_matter = models.BooleanField(
-        default=False
-    )
-
-    expression_in_english = models.BooleanField(
-        default=False
-    )
-
-    use_of_teaching_aids = models.BooleanField(
-        default=False
-    )
-
-    engaging_students = models.BooleanField(
-        default=False
-    )
-
-    encouraging_student_participation = models.BooleanField(
-        default=False
-    )
+    preparation_of_content = models.BooleanField(default=False)
+    delivery_of_subject_matter = models.BooleanField(default=False)
+    expression_in_english = models.BooleanField(default=False)
+    use_of_teaching_aids = models.BooleanField(default=False)
+    engaging_students = models.BooleanField(default=False)
+    encouraging_student_participation = models.BooleanField(default=False)
 
     other_strengths = models.TextField(
         blank=True,
         null=True
     )
 
-    # --------------------------------------------------------
-    # AREAS NEEDING IMPROVEMENT
-    # --------------------------------------------------------
-
     improvement_areas = models.TextField(
         blank=True,
         null=True
     )
-
-    # --------------------------------------------------------
-    # OVERALL ASSESSMENT
-    # --------------------------------------------------------
 
     overall_grade = models.CharField(
         max_length=20,
@@ -635,15 +559,11 @@ class PeerReview(models.Model):
     )
 
     def __str__(self):
-        return (
-            f"Peer Review - "
-            f"{self.instructor}"
-        )
+        return f"Peer Review - {self.instructor}"
 
 
 # ============================================================
 # 6. PROMOTION APPLICATION
-# Appendix 3 - FORM A
 # ============================================================
 
 class PromotionApplication(models.Model):
@@ -665,15 +585,39 @@ class PromotionApplication(models.Model):
         ("NO", "No"),
     )
 
+    # ========================================================
+    # APPLICANT
+    # ========================================================
+
     employee = models.ForeignKey(
         Employee,
         on_delete=models.CASCADE,
         related_name="promotion_applications"
     )
 
-    # --------------------------------------------------------
+    # ========================================================
+    # PERSONAL PARTICULARS
+    # ========================================================
+
+    # Snapshot of applicant's name at application time
+    full_name = models.CharField(
+        max_length=300
+    )
+
+    date_of_birth = models.DateField(
+        blank=True,
+        null=True
+    )
+
+    nationality = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True
+    )
+
+    # ========================================================
     # PRESENT AND TARGET POSITION
-    # --------------------------------------------------------
+    # ========================================================
 
     current_title = models.ForeignKey(
         JobTitle,
@@ -685,21 +629,6 @@ class PromotionApplication(models.Model):
         JobTitle,
         on_delete=models.PROTECT,
         related_name="targeted_promotion_applications"
-    )
-
-    # --------------------------------------------------------
-    # APPENDIX 3 PERSONAL PARTICULARS
-    # --------------------------------------------------------
-
-    date_of_birth = models.DateField(
-        blank=True,
-        null=True
-    )
-
-    nationality = models.CharField(
-        max_length=100,
-        blank=True,
-        null=True
     )
 
     date_of_appointment_at_suza = models.DateField(
@@ -761,30 +690,12 @@ class PromotionApplication(models.Model):
         null=True
     )
 
-    # --------------------------------------------------------
-    # REQUIRED DOCUMENTS
-    # --------------------------------------------------------
+    # ========================================================
+    # DOCUMENTS
+    # ========================================================
 
     cv = models.FileField(
         upload_to="promotion_documents/cv/",
-        validators=[
-            FileExtensionValidator(["pdf"])
-        ],
-        blank=True,
-        null=True
-    )
-
-    promotion_application_form = models.FileField(
-        upload_to="promotion_documents/application_forms/",
-        validators=[
-            FileExtensionValidator(["pdf"])
-        ],
-        blank=True,
-        null=True
-    )
-
-    checklist_form = models.FileField(
-        upload_to="promotion_documents/checklists/",
         validators=[
             FileExtensionValidator(["pdf"])
         ],
@@ -801,9 +712,9 @@ class PromotionApplication(models.Model):
         null=True
     )
 
-    # --------------------------------------------------------
-    # WORKFLOW
-    # --------------------------------------------------------
+    # ========================================================
+    # APPLICATION WORKFLOW
+    # ========================================================
 
     status = models.CharField(
         max_length=30,
@@ -835,9 +746,9 @@ class PromotionApplication(models.Model):
         related_name="assigned_promotion_reviews"
     )
 
-    # --------------------------------------------------------
-    # RECOMMENDATIONS
-    # --------------------------------------------------------
+    # ========================================================
+    # HOD
+    # ========================================================
 
     hod_recommendation = models.TextField(
         blank=True,
@@ -854,6 +765,10 @@ class PromotionApplication(models.Model):
         null=True
     )
 
+    # ========================================================
+    # DEAN
+    # ========================================================
+
     dean_recommendation = models.TextField(
         blank=True,
         null=True
@@ -868,6 +783,10 @@ class PromotionApplication(models.Model):
         blank=True,
         null=True
     )
+
+    # ========================================================
+    # COMMITTEE
+    # ========================================================
 
     committee_decision = models.TextField(
         blank=True,
@@ -884,9 +803,9 @@ class PromotionApplication(models.Model):
         null=True
     )
 
-    # --------------------------------------------------------
-    # POINT SUMMARY
-    # --------------------------------------------------------
+    # ========================================================
+    # POINTS
+    # ========================================================
 
     journal_book_points = models.DecimalField(
         max_digits=8,
@@ -924,9 +843,9 @@ class PromotionApplication(models.Model):
         default=0
     )
 
-    # --------------------------------------------------------
+    # ========================================================
     # DECLARATION
-    # --------------------------------------------------------
+    # ========================================================
 
     applicant_declaration = models.BooleanField(
         default=False
@@ -937,9 +856,9 @@ class PromotionApplication(models.Model):
         null=True
     )
 
-    # --------------------------------------------------------
+    # ========================================================
     # TIMESTAMPS
-    # --------------------------------------------------------
+    # ========================================================
 
     submitted_at = models.DateTimeField(
         blank=True,
@@ -956,37 +875,35 @@ class PromotionApplication(models.Model):
 
     def __str__(self):
         return (
-            f"{self.employee.first_name} "
-            f"{self.employee.last_name} -> "
+            f"{self.full_name} -> "
             f"{self.targeted_title.title_name}"
         )
 
 
 # ============================================================
-# 7. PUBLICATION / PROMOTION MATERIAL
-# Appendix 3 CHECKLIST
+# 7. PROMOTION MATERIAL / CHECKLIST
 # ============================================================
 
 class PromotionMaterial(models.Model):
 
     MATERIAL_TYPES = (
-        ("JOURNAL_ARTICLE", "Journal Article"),
-        ("BOOK_CHAPTER", "Chapter in a Book"),
-        ("SCHOLARLY_BOOK", "Scholarly Book"),
+        ("JOURNAL_ARTICLE", "Journal Articles"),
+        ("BOOK_CHAPTER", "Chapters in a Book"),
+        ("SCHOLARLY_BOOK", "Scholarly Books"),
         (
             "INTERNATIONAL_PROCEEDINGS",
-            "Scholarly Paper in International Symposium/Conference"
+            "Scholarly Papers in Proceedings of Professional International Symposia or Conferences"
         ),
-        ("CASE_REPORT", "Case Report / Short Communication"),
-        ("PATENT", "Patent"),
-        ("CONSULTANCY_REPORT", "Consultancy Report"),
-        ("CONFERENCE_PAPER", "Conference Paper"),
-        ("EXTENSION_MATERIAL", "Extension Material"),
-        ("LOWER_LEVEL_BOOK", "Lower-level Book"),
-        ("DICTIONARY", "Subject / General Dictionary"),
-        ("DICTIONARY_LETTER", "Letter in Dictionary"),
-        ("BOOK_REVIEW", "Book Review"),
-        ("JOURNAL_REVIEW", "Journal Article Review"),
+        ("CASE_REPORT", "Case Reports or Short Communications"),
+        ("PATENT", "Patents"),
+        ("CONSULTANCY_REPORT", "Consultancy Reports"),
+        ("CONFERENCE_PAPER", "Conference Papers"),
+        ("EXTENSION_MATERIAL", "Extension Materials"),
+        ("LOWER_LEVEL_BOOK", "Lower-level Books"),
+        ("DICTIONARY", "Subject and General Dictionaries"),
+        ("DICTIONARY_LETTER", "Letters in Dictionaries"),
+        ("BOOK_REVIEW", "Book Reviews"),
+        ("JOURNAL_REVIEW", "Journal Articles Review"),
     )
 
     application = models.ForeignKey(
@@ -995,55 +912,19 @@ class PromotionMaterial(models.Model):
         related_name="promotion_materials"
     )
 
-    reference_in_cv = models.CharField(
-        max_length=100,
-        blank=True,
-        null=True
-    )
-
     material_type = models.CharField(
         max_length=50,
         choices=MATERIAL_TYPES
     )
 
-    title = models.CharField(
-        max_length=500
-    )
-
-    journal_title = models.CharField(
-        max_length=300,
-        blank=True,
-        null=True
-    )
-
-    authors = models.TextField(
-        blank=True,
-        null=True
-    )
-
-    publication_year = models.PositiveIntegerField(
-        blank=True,
-        null=True
-    )
-
-    indexing = models.CharField(
-        max_length=200,
-        blank=True,
-        null=True
-    )
-
-    reviewer_name = models.CharField(
-        max_length=200,
-        blank=True,
-        null=True
-    )
-
+    # Score entered by applicant
     points = models.DecimalField(
         max_digits=8,
         decimal_places=2,
         default=0
     )
 
+    # Supporting evidence for THIS material
     document = models.FileField(
         upload_to="promotion_documents/materials/",
         validators=[
@@ -1058,12 +939,14 @@ class PromotionMaterial(models.Model):
     )
 
     def __str__(self):
-        return self.title
+        return (
+            f"{self.get_material_type_display()} - "
+            f"{self.points} points"
+        )
 
 
 # ============================================================
 # 8. ACADEMIC MATERIAL REVIEW
-# Appendix 4 - FORM C
 # ============================================================
 
 class AcademicMaterialReview(models.Model):
@@ -1087,48 +970,13 @@ class AcademicMaterialReview(models.Model):
         related_name="academic_material_reviews"
     )
 
-    # --------------------------------------------------------
-    # REVIEW CRITERIA
-    # --------------------------------------------------------
-
-    authenticity = models.TextField(
-        blank=True,
-        null=True
-    )
-
-    originality = models.TextField(
-        blank=True,
-        null=True
-    )
-
-    coverage_of_subject = models.TextField(
-        blank=True,
-        null=True
-    )
-
-    contribution_to_knowledge = models.TextField(
-        blank=True,
-        null=True
-    )
-
-    relevance_to_discipline = models.TextField(
-        blank=True,
-        null=True
-    )
-
-    presentation_quality = models.TextField(
-        blank=True,
-        null=True
-    )
-
-    technical_recommendation = models.TextField(
-        blank=True,
-        null=True
-    )
-
-    # --------------------------------------------------------
-    # OVERALL RANKING
-    # --------------------------------------------------------
+    authenticity = models.TextField(blank=True, null=True)
+    originality = models.TextField(blank=True, null=True)
+    coverage_of_subject = models.TextField(blank=True, null=True)
+    contribution_to_knowledge = models.TextField(blank=True, null=True)
+    relevance_to_discipline = models.TextField(blank=True, null=True)
+    presentation_quality = models.TextField(blank=True, null=True)
+    technical_recommendation = models.TextField(blank=True, null=True)
 
     grade = models.CharField(
         max_length=1,
@@ -1143,20 +991,9 @@ class AcademicMaterialReview(models.Model):
         default=0
     )
 
-    overall_quality = models.TextField(
-        blank=True,
-        null=True
-    )
-
-    strengths = models.TextField(
-        blank=True,
-        null=True
-    )
-
-    shortcomings = models.TextField(
-        blank=True,
-        null=True
-    )
+    overall_quality = models.TextField(blank=True, null=True)
+    strengths = models.TextField(blank=True, null=True)
+    shortcomings = models.TextField(blank=True, null=True)
 
     reviewer_name = models.CharField(
         max_length=200,
@@ -1186,113 +1023,159 @@ class AcademicMaterialReview(models.Model):
     )
 
     def __str__(self):
-        return (
-            f"Review - {self.material.title}"
-        )
+        return f"Review - {self.material}"
 
 
 # ============================================================
-# 9. APPEAL
-# Appendix 5 - FORM D
+# 9. REVIEWER ASSIGNMENT
 # ============================================================
 
-class PromotionAppeal(models.Model):
-
-    STATUS_CHOICES = (
-        ("SUBMITTED", "Submitted"),
-        ("UNDER_REVIEW", "Under Review"),
-        ("UPHELD", "Appeal Upheld"),
-        ("REJECTED", "Appeal Rejected"),
-    )
+class ReviewerAssignment(models.Model):
 
     application = models.ForeignKey(
         PromotionApplication,
         on_delete=models.CASCADE,
-        related_name="appeals"
+        related_name="reviewer_assignments"
     )
 
-    applicant = models.ForeignKey(
+    reviewer = models.ForeignKey(
         Employee,
         on_delete=models.CASCADE,
-        related_name="promotion_appeals"
+        related_name="reviewer_assignments"
     )
 
-    department = models.ForeignKey(
-        Department,
+    assigned_by = models.ForeignKey(
+        Employee,
         on_delete=models.SET_NULL,
         null=True,
-        blank=True
-    )
-
-    position = models.ForeignKey(
-        JobTitle,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True
-    )
-
-    date_of_appointment_at_position = models.DateField(
         blank=True,
-        null=True
+        related_name="reviewer_assignments_created"
     )
 
-    # --------------------------------------------------------
-    # APPEAL DETAILS
-    # --------------------------------------------------------
-
-    decisions_disagreed_with = models.TextField()
-
-    reasons_for_disagreement = models.TextField()
-
-    self_rating = models.TextField(
-        blank=True,
-        null=True
-    )
-
-    applicant_signature_date = models.DateField(
-        blank=True,
-        null=True
-    )
-
-    # --------------------------------------------------------
-    # APPEAL COMMITTEE
-    # --------------------------------------------------------
-
-    appeal_committee_comments = models.TextField(
-        blank=True,
-        null=True
-    )
-
-    appeal_decision = models.TextField(
-        blank=True,
-        null=True
-    )
-
-    status = models.CharField(
-        max_length=30,
-        choices=STATUS_CHOICES,
-        default="SUBMITTED"
-    )
-
-    received_at = models.DateTimeField(
+    assigned_at = models.DateTimeField(
         auto_now_add=True
     )
 
-    decided_at = models.DateTimeField(
+    completed = models.BooleanField(
+        default=False
+    )
+
+    completed_at = models.DateTimeField(
+        blank=True,
+        null=True
+    )
+
+    comments = models.TextField(
+        blank=True,
+        null=True
+    )
+
+    def __str__(self):
+        return f"{self.reviewer} - {self.application}"
+
+
+# ============================================================
+# 10. PROMOTION NOTIFICATION
+# ============================================================
+
+class PromotionNotification(models.Model):
+
+    NOTIFICATION_TYPES = (
+        ("APPLICATION_SUBMITTED", "Application Submitted"),
+        ("HOD_REVIEW", "HOD Review"),
+        ("HOD_APPROVED", "HOD Approved"),
+        ("HOD_REJECTED", "HOD Rejected"),
+
+        ("DEAN_REVIEW", "Dean Review"),
+        ("DEAN_APPROVED", "Dean Approved"),
+        ("DEAN_REJECTED", "Dean Rejected"),
+
+        ("REVIEWER_ASSIGNED", "Reviewer Assigned"),
+        ("UNDER_REVIEW", "Under Academic Review"),
+        ("REVIEW_COMPLETED", "Academic Review Completed"),
+
+        ("COMMITTEE_REVIEW", "Promotion Committee Review"),
+        ("APPROVED", "Promotion Approved"),
+        ("REJECTED", "Promotion Rejected"),
+
+        ("APPEAL", "Promotion Appeal"),
+        ("GENERAL", "General Notification"),
+    )
+
+    # ========================================================
+    # STAFF WHO RECEIVES NOTIFICATION
+    # ========================================================
+
+    employee = models.ForeignKey(
+        Employee,
+        on_delete=models.CASCADE,
+        related_name="promotion_notifications"
+    )
+
+    # ========================================================
+    # RELATED APPLICATION
+    # ========================================================
+
+    application = models.ForeignKey(
+        PromotionApplication,
+        on_delete=models.CASCADE,
+        related_name="notifications",
+        null=True,
+        blank=True
+    )
+
+    # ========================================================
+    # NOTIFICATION INFORMATION
+    # ========================================================
+
+    notification_type = models.CharField(
+        max_length=50,
+        choices=NOTIFICATION_TYPES,
+        default="GENERAL"
+    )
+
+    title = models.CharField(
+        max_length=255
+    )
+
+    message = models.TextField()
+
+    # Current stage/status shown to staff
+    status = models.CharField(
+        max_length=50,
+        blank=True,
+        null=True
+    )
+
+    is_read = models.BooleanField(
+        default=False
+    )
+
+    # ========================================================
+    # TIMESTAMPS
+    # ========================================================
+
+    created_at = models.DateTimeField(
+        auto_now_add=True
+    )
+
+    read_at = models.DateTimeField(
         blank=True,
         null=True
     )
 
     def __str__(self):
         return (
-            f"Appeal - "
-            f"{self.applicant.first_name} "
-            f"{self.applicant.last_name}"
+            f"{self.employee} - "
+            f"{self.title}"
         )
+
+    class Meta:
+        ordering = ["-created_at"]
 
 
 # ============================================================
-# 10. PROMOTION HISTORY
+# 11. PROMOTION HISTORY
 # ============================================================
 
 class PromotionHistory(models.Model):
@@ -1344,14 +1227,98 @@ class PromotionHistory(models.Model):
     )
 
     def __str__(self):
-        return (
-            f"{self.employee} -> "
-            f"{self.new_title.title_name}"
-        )
+        return f"{self.employee} -> {self.new_title.title_name}"
 
 
 # ============================================================
-# 11. SYSTEM LOG
+# 12. PROMOTION APPEAL
+# ============================================================
+
+class PromotionAppeal(models.Model):
+
+    STATUS_CHOICES = (
+        ("SUBMITTED", "Submitted"),
+        ("UNDER_REVIEW", "Under Review"),
+        ("UPHELD", "Appeal Upheld"),
+        ("REJECTED", "Appeal Rejected"),
+    )
+
+    application = models.ForeignKey(
+        PromotionApplication,
+        on_delete=models.CASCADE,
+        related_name="appeals"
+    )
+
+    applicant = models.ForeignKey(
+        Employee,
+        on_delete=models.CASCADE,
+        related_name="promotion_appeals"
+    )
+
+    department = models.ForeignKey(
+        Department,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True
+    )
+
+    position = models.ForeignKey(
+        JobTitle,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True
+    )
+
+    date_of_appointment_at_position = models.DateField(
+        blank=True,
+        null=True
+    )
+
+    decisions_disagreed_with = models.TextField()
+
+    reasons_for_disagreement = models.TextField()
+
+    self_rating = models.TextField(
+        blank=True,
+        null=True
+    )
+
+    applicant_signature_date = models.DateField(
+        blank=True,
+        null=True
+    )
+
+    appeal_committee_comments = models.TextField(
+        blank=True,
+        null=True
+    )
+
+    appeal_decision = models.TextField(
+        blank=True,
+        null=True
+    )
+
+    status = models.CharField(
+        max_length=30,
+        choices=STATUS_CHOICES,
+        default="SUBMITTED"
+    )
+
+    received_at = models.DateTimeField(
+        auto_now_add=True
+    )
+
+    decided_at = models.DateTimeField(
+        blank=True,
+        null=True
+    )
+
+    def __str__(self):
+        return f"Appeal - {self.applicant}"
+
+
+# ============================================================
+# 13. SYSTEM LOG
 # ============================================================
 
 class SystemLog(models.Model):
@@ -1383,67 +1350,4 @@ class SystemLog(models.Model):
     )
 
     def __str__(self):
-        return (
-            f"{self.created_at} - "
-            f"{self.action}"
-        )
-
-
-# ============================================================
-# 12. REVIEWER ASSIGNMENT
-# ============================================================
-
-class ReviewerAssignment(models.Model):
-
-    application = models.ForeignKey(
-        PromotionApplication,
-        on_delete=models.CASCADE,
-        related_name="reviewer_assignments"
-    )
-
-    reviewer = models.ForeignKey(
-        Employee,
-        on_delete=models.CASCADE,
-        related_name="reviewer_assignments"
-    )
-
-    assigned_by = models.ForeignKey(
-        Employee,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="reviewer_assignments_created"
-    )
-
-    assigned_at = models.DateTimeField(
-        auto_now_add=True
-    )
-
-    completed = models.BooleanField(
-        default=False
-    )
-
-    completed_at = models.DateTimeField(
-        blank=True,
-        null=True
-    )
-
-    comments = models.TextField(
-        blank=True,
-        null=True
-    )
-
-    def __str__(self):
-        return (
-            f"{self.reviewer} - "
-            f"{self.application}"
-        )
-
-
-# ============================================================
-# 13. DEFAULT PRIMARY KEY
-# ============================================================
-
-# Add this to settings.py instead if preferred:
-#
-# DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+        return f"{self.created_at} - {self.action}"

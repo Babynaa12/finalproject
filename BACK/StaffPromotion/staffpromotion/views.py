@@ -1497,7 +1497,327 @@ def submit_promotion_application(request, pk):
             },
             status=status.HTTP_400_BAD_REQUEST
         )
+# ============================================================
+# PROMOTION MATERIALS / CHECKLIST
+# Appendix 3 - Promotion Checklist Materials
+# ============================================================
 
+@api_view(["GET", "POST"])
+@permission_classes([IsAuthenticated])
+def promotion_materials(request):
+
+    # ========================================================
+    # GET MATERIALS
+    # ========================================================
+
+    if request.method == "GET":
+
+        application_id = request.query_params.get("application")
+
+        # ----------------------------------------------------
+        # STAFF
+        # ----------------------------------------------------
+
+        if request.user.role == "STAFF":
+
+            materials = PromotionMaterial.objects.filter(
+                application__employee=request.user
+            )
+
+        # ----------------------------------------------------
+        # REVIEWER / COMMITTEE / ADMIN
+        # ----------------------------------------------------
+
+        elif request.user.role in [
+            "REVIEWER",
+            "COMMITTEE",
+            "ADMIN",
+            "DEAN",
+            "HOD",
+        ]:
+
+            materials = PromotionMaterial.objects.all()
+
+        else:
+
+            return Response(
+                {
+                    "error": "You are not authorized to view promotion materials."
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # ----------------------------------------------------
+        # FILTER BY APPLICATION
+        # ----------------------------------------------------
+
+        if application_id:
+
+            materials = materials.filter(
+                application_id=application_id
+            )
+
+        materials = materials.order_by("-created_at")
+
+        return Response(
+            PromotionMaterialSerializer(
+                materials,
+                many=True
+            ).data
+        )
+
+    # ========================================================
+    # POST MATERIAL
+    # ========================================================
+
+    if request.user.role != "STAFF":
+
+        return Response(
+            {
+                "error":
+                "Only academic staff can add promotion materials."
+            },
+            status=status.HTTP_403_FORBIDDEN
+        )
+
+    data = request.data.copy()
+
+    application_id = data.get("application")
+
+    if not application_id:
+
+        return Response(
+            {
+                "error":
+                "Promotion application is required."
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # --------------------------------------------------------
+    # CHECK APPLICATION
+    # --------------------------------------------------------
+
+    try:
+
+        application = PromotionApplication.objects.get(
+            id=application_id,
+            employee=request.user
+        )
+
+    except PromotionApplication.DoesNotExist:
+
+        return Response(
+            {
+                "error":
+                "Promotion application not found."
+            },
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    # --------------------------------------------------------
+    # ONLY DRAFT APPLICATION
+    # --------------------------------------------------------
+
+    if application.status != "DRAFT":
+
+        return Response(
+            {
+                "error":
+                "Materials can only be added while the application is in DRAFT status."
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # --------------------------------------------------------
+    # SERIALIZE
+    # --------------------------------------------------------
+
+    serializer = PromotionMaterialSerializer(
+        data=data
+    )
+
+    if serializer.is_valid():
+
+        material = serializer.save(
+            application=application
+        )
+
+        create_system_log(
+            request.user,
+            "PROMOTION_MATERIAL_CREATED",
+            (
+                f"Promotion material '{material.title}' "
+                f"added to application {application.id}"
+            ),
+            request
+        )
+
+        return Response(
+            PromotionMaterialSerializer(material).data,
+            status=status.HTTP_201_CREATED
+        )
+
+    return Response(
+        serializer.errors,
+        status=status.HTTP_400_BAD_REQUEST
+    )
+
+
+# ============================================================
+# PROMOTION MATERIAL DETAIL
+# ============================================================
+
+@api_view(["GET", "PUT", "PATCH", "DELETE"])
+@permission_classes([IsAuthenticated])
+def promotion_material_detail(request, pk):
+
+    # --------------------------------------------------------
+    # FIND MATERIAL
+    # --------------------------------------------------------
+
+    try:
+
+        material = PromotionMaterial.objects.get(
+            id=pk
+        )
+
+    except PromotionMaterial.DoesNotExist:
+
+        return Response(
+            {
+                "error":
+                "Promotion material not found."
+            },
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    # --------------------------------------------------------
+    # ACCESS CONTROL
+    # --------------------------------------------------------
+
+    if request.user.role == "STAFF":
+
+        if material.application.employee != request.user:
+
+            return Response(
+                {
+                    "error":
+                    "You are not authorized to access this material."
+                },
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+    elif request.user.role not in [
+        "REVIEWER",
+        "COMMITTEE",
+        "ADMIN",
+        "DEAN",
+        "HOD",
+    ]:
+
+        return Response(
+            {
+                "error":
+                "You are not authorized to access this material."
+            },
+            status=status.HTTP_403_FORBIDDEN
+        )
+
+    # ========================================================
+    # GET
+    # ========================================================
+
+    if request.method == "GET":
+
+        return Response(
+            PromotionMaterialSerializer(
+                material
+            ).data
+        )
+
+    # ========================================================
+    # STAFF UPDATE / DELETE
+    # ========================================================
+
+    if request.user.role == "STAFF":
+
+        if material.application.status != "DRAFT":
+
+            return Response(
+                {
+                    "error":
+                    "Materials can only be modified while the application is in DRAFT status."
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+    # ========================================================
+    # UPDATE
+    # ========================================================
+
+    if request.method in [
+        "PUT",
+        "PATCH"
+    ]:
+
+        serializer = PromotionMaterialSerializer(
+            material,
+            data=request.data,
+            partial=True
+        )
+
+        if serializer.is_valid():
+
+            updated_material = serializer.save()
+
+            create_system_log(
+                request.user,
+                "PROMOTION_MATERIAL_UPDATED",
+                (
+                    f"Promotion material "
+                    f"{updated_material.id} updated"
+                ),
+                request
+            )
+
+            return Response(
+                PromotionMaterialSerializer(
+                    updated_material
+                ).data
+            )
+
+        return Response(
+            serializer.errors,
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # ========================================================
+    # DELETE
+    # ========================================================
+
+    if request.method == "DELETE":
+
+        material_id = material.id
+
+        material.delete()
+
+        create_system_log(
+            request.user,
+            "PROMOTION_MATERIAL_DELETED",
+            f"Promotion material {material_id} deleted",
+            request
+        )
+
+        return Response(
+            {
+                "message":
+                "Promotion material deleted successfully."
+            },
+            status=status.HTTP_204_NO_CONTENT
+        )
+
+        
     # ========================================================
     # REQUIRED DOCUMENT CHECK
     # ========================================================
