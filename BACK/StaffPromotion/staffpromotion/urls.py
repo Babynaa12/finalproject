@@ -166,6 +166,11 @@ urlpatterns = [
         name="applications_detail"
     ),
 
+    path(
+        "applications/<int:pk>/hod-review/",
+        views.hod_review_application,
+        name="hod_review_application"
+    ),
 
     # ========================================================
     # APPENDIX 3
@@ -253,7 +258,16 @@ urlpatterns = [
         views.manage_histories_detail,
         name="histories_detail"
     ),
+    
+    # ========================================================
+    # DEAN REVIEW
+    # ========================================================
 
+    path(
+        "applications/<int:pk>/dean-review/",
+        views.dean_review_application,
+        name="dean_review_application"
+    ),
 
     # ========================================================
     # SYSTEM LOGS

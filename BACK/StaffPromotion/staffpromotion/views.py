@@ -2,7 +2,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated, AllowAny
-
+from django.shortcuts import render, get_object_or_404
 from django.contrib.auth import authenticate, get_user_model
 from django.utils import timezone
 from django.db import transaction
@@ -1817,7 +1817,7 @@ def promotion_material_detail(request, pk):
             status=status.HTTP_204_NO_CONTENT
         )
 
-        
+
     # ========================================================
     # REQUIRED DOCUMENT CHECK
     # ========================================================
@@ -2731,6 +2731,175 @@ def generic_api(model, serializer_class):
 
     return list_create, detail
 
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def hod_review_application(request, pk):
+
+    application = get_object_or_404(
+        PromotionApplication,
+        pk=pk
+    )
+
+    recommendation = request.data.get("recommendation")
+    comments = request.data.get("comments", "")
+
+    # ========================================================
+    # VALIDATE RECOMMENDATION
+    # ========================================================
+
+    if recommendation not in [
+        "recommended",
+        "not_recommended"
+    ]:
+        return Response(
+            {
+                "detail": "Invalid HOD recommendation."
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # ========================================================
+    # SAVE HOD REVIEW
+    # ========================================================
+
+    application.hod_recommendation = recommendation
+    application.hod_comments = comments
+
+    # If your model has a field for HOD reviewer
+    # application.hod_reviewer = request.user
+
+    # ========================================================
+    # UPDATE STATUS
+    # ========================================================
+
+    if recommendation == "recommended":
+
+        application.final_status = "under_review"
+
+    else:
+
+        application.final_status = "rejected"
+
+    application.save()
+
+    # ========================================================
+    # RESPONSE
+    # ========================================================
+
+    return Response(
+        {
+            "message": "HOD review submitted successfully.",
+            "application_id": application.id,
+            "recommendation": application.hod_recommendation,
+            "comments": application.hod_comments,
+            "status": application.final_status,
+        },
+        status=status.HTTP_200_OK
+    )
+
+# ============================================================
+# DEAN REVIEW APPLICATION
+# ============================================================
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def dean_review_application(request, pk):
+
+    application = get_object_or_404(
+        PromotionApplication,
+        pk=pk
+    )
+
+    # --------------------------------------------------------
+    # GET DATA FROM REACT
+    # --------------------------------------------------------
+
+    dean_recommendation = request.data.get(
+        "dean_recommendation"
+    )
+
+    dean_comment = request.data.get(
+        "dean_comment",
+        ""
+    )
+
+    # --------------------------------------------------------
+    # VALID RECOMMENDATIONS
+    # --------------------------------------------------------
+
+    valid_recommendations = [
+        "recommended",
+        "not_recommended",
+    ]
+
+    if dean_recommendation not in valid_recommendations:
+        return Response(
+            {
+                "dean_recommendation": [
+                    "Invalid Dean recommendation."
+                ]
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # --------------------------------------------------------
+    # COMMENT REQUIRED
+    # --------------------------------------------------------
+
+    if not dean_comment.strip():
+        return Response(
+            {
+                "dean_comment": [
+                    "Dean remarks are required."
+                ]
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # --------------------------------------------------------
+    # SAVE DEAN REVIEW
+    # --------------------------------------------------------
+
+    application.dean_recommendation = dean_recommendation
+    application.dean_comment = dean_comment
+
+    # --------------------------------------------------------
+    # SET DEAN STATUS
+    # --------------------------------------------------------
+
+    if dean_recommendation == "recommended":
+
+        application.dean_status = "recommended"
+
+    else:
+
+        application.dean_status = "not_recommended"
+
+    application.save()
+
+    # --------------------------------------------------------
+    # RESPONSE
+    # --------------------------------------------------------
+
+    return Response(
+        {
+            "message": "Dean review submitted successfully.",
+
+            "application": {
+                "id": application.id,
+
+                "dean_recommendation":
+                    application.dean_recommendation,
+
+                "dean_comment":
+                    application.dean_comment,
+
+                "dean_status":
+                    application.dean_status,
+            }
+        },
+        status=status.HTTP_200_OK
+    )
 
 # ============================================================
 # CRUD INSTANCES

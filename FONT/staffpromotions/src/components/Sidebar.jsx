@@ -67,7 +67,6 @@ function Sidebar() {
   // ============================================================
 
   const menuItems = {
-
     // ==========================================================
     // STAFF
     // ==========================================================
@@ -260,6 +259,12 @@ function Sidebar() {
       },
 
       {
+        path: "/reviewer/reviewer-materials",
+        label: "Reviewer Materials",
+        icon: <FaFileAlt />,
+      },
+
+      {
         path: "/reviewer/completed-reviews",
         label: "Completed Reviews",
         icon: <FaHistory />,
@@ -316,9 +321,8 @@ function Sidebar() {
       {/* ======================================================
           HEADER
       ====================================================== */}
-{/* 
-      <div className="sidebar-header">
 
+      <div className="sidebar-header">
         <div>
           <h2>Promotion System</h2>
 
@@ -326,21 +330,18 @@ function Sidebar() {
             {roleNames[role] || "User"}
           </p>
         </div>
-
-      </div> */}
+      </div>
 
       {/* ======================================================
           USER INFORMATION
       ====================================================== */}
 
-      {/* <div className="sidebar-user">
+      <div className="sidebar-user">
 
         <div className="user-avatar">
-
           {user?.first_name?.charAt(0)?.toUpperCase() ||
             user?.username?.charAt(0)?.toUpperCase() ||
             "U"}
-
         </div>
 
         <div className="user-info">
@@ -360,7 +361,7 @@ function Sidebar() {
 
         </div>
 
-      </div> */}
+      </div>
 
       {/* ======================================================
           NAVIGATION

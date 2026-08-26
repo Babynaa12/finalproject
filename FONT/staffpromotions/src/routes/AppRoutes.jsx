@@ -1,8 +1,4 @@
-import {
-  Routes,
-  Route,
-  Navigate,
-} from "react-router-dom";
+import { Routes, Route, Navigate } from "react-router-dom";
 
 // ============================================================
 // AUTH
@@ -74,6 +70,7 @@ import DeanReviewApplication from "../pages/dean/ReviewApplication";
 
 // ============================================================
 // REVIEWER PAGES
+// IMPORTANT: folder is "reviewer" exactly as your tree shows
 // ============================================================
 
 import ReviewerDashboard from "../pages/reviewer/Dashboard";
@@ -81,6 +78,7 @@ import ReviewerAssignedReview from "../pages/reviewer/AssignedReview";
 import ReviewerCompleteReviews from "../pages/reviewer/CompleteReviews";
 import ReviewerProfile from "../pages/reviewer/Profile";
 import ReviewerReviewMaterial from "../pages/reviewer/ReviewMaterial";
+
 
 // ============================================================
 // APP ROUTES
@@ -104,6 +102,7 @@ function AppRoutes() {
         }
       />
 
+
       {/* ======================================================
           LOGIN
       ====================================================== */}
@@ -112,6 +111,7 @@ function AppRoutes() {
         path="/login"
         element={<Login />}
       />
+
 
       {/* ======================================================
           STAFF
@@ -129,6 +129,9 @@ function AppRoutes() {
         }
       />
 
+
+      {/* STAFF DASHBOARD */}
+
       <Route
         path="/staff/dashboard"
         element={
@@ -139,6 +142,9 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+
+
+      {/* APPLY PROMOTION */}
 
       <Route
         path="/staff/apply"
@@ -151,6 +157,9 @@ function AppRoutes() {
         }
       />
 
+
+      {/* MY APPLICATIONS */}
+
       <Route
         path="/staff/my-applications"
         element={
@@ -161,6 +170,9 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+
+
+      {/* APPLICATION DETAIL */}
 
       <Route
         path="/staff/application/:id"
@@ -173,6 +185,9 @@ function AppRoutes() {
         }
       />
 
+
+      {/* PROMOTION HISTORY */}
+
       <Route
         path="/staff/history"
         element={
@@ -183,6 +198,9 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+
+
+      {/* NOTIFICATIONS */}
 
       <Route
         path="/staff/notifications"
@@ -195,6 +213,9 @@ function AppRoutes() {
         }
       />
 
+
+      {/* PROFILE */}
+
       <Route
         path="/staff/profile"
         element={
@@ -206,10 +227,11 @@ function AppRoutes() {
         }
       />
 
-      {/* APPEALS */}
+
+      {/* APPEAL */}
 
       <Route
-        path="/staff/appeals"
+        path="/staff/appeal"
         element={
           <ProtectedRoute allowedRoles={["STAFF"]}>
             <StaffLayout>
@@ -218,6 +240,7 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+
 
       {/* PEER REVIEWS */}
 
@@ -232,6 +255,7 @@ function AppRoutes() {
         }
       />
 
+
       {/* PROMOTION MATERIAL */}
 
       <Route
@@ -245,6 +269,7 @@ function AppRoutes() {
         }
       />
 
+
       {/* STUDENT EVALUATIONS */}
 
       <Route
@@ -257,6 +282,7 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+
 
       {/* ======================================================
           STUDENT
@@ -274,6 +300,9 @@ function AppRoutes() {
         }
       />
 
+
+      {/* STUDENT DASHBOARD */}
+
       <Route
         path="/student/dashboard"
         element={
@@ -284,6 +313,9 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+
+
+      {/* TEACHING EVALUATIONS */}
 
       <Route
         path="/student/teaching-evaluations"
@@ -296,6 +328,9 @@ function AppRoutes() {
         }
       />
 
+
+      {/* EVALUATION HISTORY */}
+
       <Route
         path="/student/evaluation-history"
         element={
@@ -307,6 +342,9 @@ function AppRoutes() {
         }
       />
 
+
+      {/* STUDENT PROFILE */}
+
       <Route
         path="/student/profile"
         element={
@@ -317,6 +355,7 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+
 
       {/* ======================================================
           HOD
@@ -334,7 +373,8 @@ function AppRoutes() {
         }
       />
 
-      {/* DASHBOARD */}
+
+      {/* HOD DASHBOARD */}
 
       <Route
         path="/hod/dashboard"
@@ -346,6 +386,7 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+
 
       {/* APPLICATIONS */}
 
@@ -360,6 +401,7 @@ function AppRoutes() {
         }
       />
 
+
       {/* APPLICATION DETAIL */}
 
       <Route
@@ -372,6 +414,7 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+
 
       {/* REVIEW APPLICATION */}
 
@@ -386,40 +429,8 @@ function AppRoutes() {
         }
       />
 
-      {/* ======================================================
-          HOD REVIEWS
-          
-          This route prevents /hod/reviews from becoming
-          an unknown URL.
-      ====================================================== */}
 
-      <Route
-        path="/hod/reviews"
-        element={
-          <ProtectedRoute allowedRoles={["HOD"]}>
-            <HODLayout>
-              <HODApplication />
-            </HODLayout>
-          </ProtectedRoute>
-        }
-      />
-
-      {/* ======================================================
-          HOD EMPLOYEES
-      ====================================================== */}
-
-      <Route
-        path="/hod/employees"
-        element={
-          <ProtectedRoute allowedRoles={["HOD"]}>
-            <HODLayout>
-              <HODStaff />
-            </HODLayout>
-          </ProtectedRoute>
-        }
-      />
-
-      {/* OLD / ALTERNATIVE HOD STAFF URL */}
+      {/* STAFF */}
 
       <Route
         path="/hod/staff"
@@ -432,24 +443,8 @@ function AppRoutes() {
         }
       />
 
-      {/* ======================================================
-          HOD REPORTS
-      ====================================================== */}
 
-      <Route
-        path="/hod/reports"
-        element={
-          <ProtectedRoute allowedRoles={["HOD"]}>
-            <HODLayout>
-              <HODHistory />
-            </HODLayout>
-          </ProtectedRoute>
-        }
-      />
-
-      {/* ======================================================
-          HOD HISTORY
-      ====================================================== */}
+      {/* HISTORY */}
 
       <Route
         path="/hod/history"
@@ -461,6 +456,7 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+
 
       {/* ======================================================
           DEAN
@@ -478,6 +474,9 @@ function AppRoutes() {
         }
       />
 
+
+      {/* DEAN DASHBOARD */}
+
       <Route
         path="/dean/dashboard"
         element={
@@ -488,6 +487,9 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+
+
+      {/* APPLICATIONS */}
 
       <Route
         path="/dean/applications"
@@ -500,6 +502,9 @@ function AppRoutes() {
         }
       />
 
+
+      {/* APPLICATION DETAIL */}
+
       <Route
         path="/dean/application/:id"
         element={
@@ -510,6 +515,9 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+
+
+      {/* REVIEW APPLICATION */}
 
       <Route
         path="/dean/review/:id"
@@ -522,33 +530,8 @@ function AppRoutes() {
         }
       />
 
-      {/* DEAN REVIEWS */}
 
-      <Route
-        path="/dean/reviews"
-        element={
-          <ProtectedRoute allowedRoles={["DEAN"]}>
-            <DeanLayout>
-              <DeanApplication />
-            </DeanLayout>
-          </ProtectedRoute>
-        }
-      />
-
-      {/* DEAN REPORTS */}
-
-      <Route
-        path="/dean/reports"
-        element={
-          <ProtectedRoute allowedRoles={["DEAN"]}>
-            <DeanLayout>
-              <DeanHistory />
-            </DeanLayout>
-          </ProtectedRoute>
-        }
-      />
-
-      {/* DEAN HISTORY */}
+      {/* HISTORY */}
 
       <Route
         path="/dean/history"
@@ -560,6 +543,7 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+
 
       {/* ======================================================
           REVIEWER
@@ -577,6 +561,9 @@ function AppRoutes() {
         }
       />
 
+
+      {/* REVIEWER DASHBOARD */}
+
       <Route
         path="/reviewer/dashboard"
         element={
@@ -587,6 +574,9 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+
+
+      {/* ASSIGNED REVIEWS */}
 
       <Route
         path="/reviewer/assigned-reviews"
@@ -599,6 +589,9 @@ function AppRoutes() {
         }
       />
 
+
+      {/* REVIEW MATERIAL */}
+
       <Route
         path="/reviewer/review/:id"
         element={
@@ -609,6 +602,9 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+
+
+      {/* COMPLETED REVIEWS */}
 
       <Route
         path="/reviewer/completed-reviews"
@@ -621,6 +617,9 @@ function AppRoutes() {
         }
       />
 
+
+      {/* REVIEWER PROFILE */}
+
       <Route
         path="/reviewer/profile"
         element={
@@ -631,6 +630,7 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+
 
       {/* ======================================================
           FALLBACK

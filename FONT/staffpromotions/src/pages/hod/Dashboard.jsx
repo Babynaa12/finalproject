@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import api from "../../services/api";
+
 import {
   FaClipboardList,
   FaClock,
@@ -7,7 +8,9 @@ import {
   FaTimesCircle,
   FaEye,
   FaArrowRight,
+  FaSpinner,
 } from "react-icons/fa";
+
 import { useNavigate } from "react-router-dom";
 
 function Dashboard() {
@@ -15,6 +18,7 @@ function Dashboard() {
 
   const [applications, setApplications] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   // ============================================================
   // FETCH APPLICATIONS
@@ -25,76 +29,166 @@ function Dashboard() {
   }, []);
 
   const fetchApplications = async () => {
+    setLoading(true);
+    setError("");
+
     try {
       const token =
         localStorage.getItem("access_token") ||
         localStorage.getItem("token");
 
-      const response = await api.get(
-        "/api/applications/",
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
+      if (!token) {
+        setError("Authentication token not found.");
+        setLoading(false);
+        return;
+      }
 
-      setApplications(response.data || []);
+      const response = await api.get("/api/applications/", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
 
+      console.log("HOD Applications:", response.data);
+
+      let data = [];
+
+      if (Array.isArray(response.data)) {
+        data = response.data;
+      } else if (Array.isArray(response.data?.results)) {
+        data = response.data.results;
+      }
+
+      setApplications(data);
     } catch (error) {
-      console.error(
-        "Error loading HOD applications:",
-        error
-      );
+      console.error("Error loading HOD applications:", error);
+
+      if (error.response?.status === 401) {
+        setError(
+          "Your session has expired. Please login again."
+        );
+      } else if (error.response?.status === 403) {
+        setError(
+          "You are not authorized to view these applications."
+        );
+      } else {
+        setError(
+          error.response?.data?.detail ||
+            "Unable to load promotion applications."
+        );
+      }
     } finally {
       setLoading(false);
     }
   };
 
   // ============================================================
-  // STATUS COUNTS
+  // NORMALIZE VALUE
   // ============================================================
 
-  const pending = applications.filter(
-    (app) =>
-      String(app.final_status || "").toLowerCase() ===
-      "pending"
-  ).length;
-
-  const underReview = applications.filter(
-    (app) =>
-      String(app.final_status || "").toLowerCase() ===
-      "under review"
-  ).length;
-
-  const recommended = applications.filter(
-    (app) =>
-      String(
-        app.hod_recommendation || ""
-      ).toLowerCase() === "recommended"
-  ).length;
-
-  const rejected = applications.filter(
-    (app) =>
-      String(app.final_status || "").toLowerCase() ===
-      "rejected"
-  ).length;
+  const normalizeStatus = (value) => {
+    return String(value || "")
+      .trim()
+      .toLowerCase()
+      .replace(/_/g, " ");
+  };
 
   // ============================================================
-  // RECENT APPLICATIONS
+  // GET APPLICATION STATUS
   // ============================================================
 
-  const recentApplications = [...applications]
-    .sort(
-      (a, b) =>
-        new Date(
-          b.created_at || b.submitted_at
-        ) -
-        new Date(
-          a.created_at || a.submitted_at
-        )
-    )
-    .slice(0, 5);
+  const getApplicationStatus = (app) => {
+    return normalizeStatus(
+      app.final_status ||
+        app.status ||
+        app.application_status ||
+        app.workflow_status
+    );
+  };
+
+  // ============================================================
+  // GET HOD RECOMMENDATION
+  // ============================================================
+
+  const getRecommendation = (app) => {
+    return normalizeStatus(
+      app.hod_recommendation ||
+        app.recommendation ||
+        app.hod_status
+    );
+  };
+
+  // ============================================================
+  // TOTAL APPLICATIONS
+  // ============================================================
+
+  const totalApplications = applications.length;
+
+  // ============================================================
+  // PENDING
+  //
+  // Includes applications submitted/pending and waiting
+  // for HOD action.
+  // ============================================================
+
+  const pending = applications.filter((app) => {
+    const status = getApplicationStatus(app);
+    const recommendation = getRecommendation(app);
+
+    return (
+      (
+        status === "pending" ||
+        status === "submitted" ||
+        status === "new"
+      ) &&
+      !recommendation
+    );
+  }).length;
+
+  // ============================================================
+  // UNDER REVIEW
+  // ============================================================
+
+  const underReview = applications.filter((app) => {
+    const status = getApplicationStatus(app);
+
+    return (
+      status === "under review" ||
+      status === "review" ||
+      status === "in review" ||
+      status === "under_review"
+    );
+  }).length;
+
+  // ============================================================
+  // RECOMMENDED
+  // ============================================================
+
+  const recommended = applications.filter((app) => {
+    const recommendation = getRecommendation(app);
+
+    return (
+      recommendation === "recommended" ||
+      recommendation === "recommend"
+    );
+  }).length;
+
+  // ============================================================
+  // REJECTED
+  // ============================================================
+
+  const rejected = applications.filter((app) => {
+    const status = getApplicationStatus(app);
+    const recommendation = getRecommendation(app);
+
+    return (
+      status === "rejected" ||
+      status === "not recommended" ||
+      recommendation === "rejected" ||
+      recommendation === "not recommended" ||
+      recommendation === "not recommend"
+    );
+  }).length;
 
   // ============================================================
   // APPLICANT NAME
@@ -103,9 +197,43 @@ function Dashboard() {
   const getApplicantName = (app) => {
     return (
       app.employee_name ||
+      app.applicant_name ||
       app.employee?.name ||
+      app.employee?.full_name ||
       app.employee?.username ||
+      app.user?.name ||
+      app.user?.full_name ||
+      app.user?.username ||
       "Unknown Applicant"
+    );
+  };
+
+  // ============================================================
+  // CURRENT POSITION
+  // ============================================================
+
+  const getCurrentPosition = (app) => {
+    return (
+      app.current_title_name ||
+      app.current_position ||
+      app.current_title ||
+      app.employee?.current_position ||
+      app.employee?.position ||
+      "—"
+    );
+  };
+
+  // ============================================================
+  // TARGET POSITION
+  // ============================================================
+
+  const getTargetPosition = (app) => {
+    return (
+      app.targeted_title_name ||
+      app.target_position ||
+      app.target_title ||
+      app.promotion_title ||
+      "—"
     );
   };
 
@@ -114,37 +242,39 @@ function Dashboard() {
   // ============================================================
 
   const formatDate = (date) => {
-    if (!date) return "—";
+    if (!date) {
+      return "—";
+    }
 
-    return new Date(date).toLocaleDateString(
-      "en-GB",
-      {
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-      }
-    );
+    const parsedDate = new Date(date);
+
+    if (Number.isNaN(parsedDate.getTime())) {
+      return "—";
+    }
+
+    return parsedDate.toLocaleDateString("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
   };
 
   // ============================================================
-  // STATUS
+  // STATUS BADGE
   // ============================================================
 
   const getStatus = (app) => {
-    const status = String(
-      app.final_status || "Pending"
-    ).toLowerCase();
+    const status = getApplicationStatus(app);
+    const recommendation = getRecommendation(app);
 
-    if (status === "approved") {
-      return (
-        <span style={styles.approved}>
-          <FaCheckCircle />
-          Approved
-        </span>
-      );
-    }
-
-    if (status === "rejected") {
+    // REJECTED
+    if (
+      status === "rejected" ||
+      status === "not recommended" ||
+      recommendation === "rejected" ||
+      recommendation === "not recommended" ||
+      recommendation === "not recommend"
+    ) {
       return (
         <span style={styles.rejected}>
           <FaTimesCircle />
@@ -153,7 +283,38 @@ function Dashboard() {
       );
     }
 
-    if (status === "under review") {
+    // APPROVED
+    if (
+      status === "approved" ||
+      status === "promoted"
+    ) {
+      return (
+        <span style={styles.approved}>
+          <FaCheckCircle />
+          Approved
+        </span>
+      );
+    }
+
+    // RECOMMENDED
+    if (
+      recommendation === "recommended" ||
+      recommendation === "recommend"
+    ) {
+      return (
+        <span style={styles.recommended}>
+          <FaCheckCircle />
+          Recommended
+        </span>
+      );
+    }
+
+    // UNDER REVIEW
+    if (
+      status === "under review" ||
+      status === "review" ||
+      status === "in review"
+    ) {
       return (
         <span style={styles.review}>
           <FaEye />
@@ -162,6 +323,7 @@ function Dashboard() {
       );
     }
 
+    // PENDING
     return (
       <span style={styles.pending}>
         <FaClock />
@@ -171,6 +333,30 @@ function Dashboard() {
   };
 
   // ============================================================
+  // RECENT APPLICATIONS
+  // ============================================================
+
+  const recentApplications = [...applications]
+    .sort((a, b) => {
+      const dateA = new Date(
+        a.created_at ||
+          a.submitted_at ||
+          a.application_date ||
+          0
+      );
+
+      const dateB = new Date(
+        b.created_at ||
+          b.submitted_at ||
+          b.application_date ||
+          0
+      );
+
+      return dateB - dateA;
+    })
+    .slice(0, 5);
+
+  // ============================================================
   // LOADING
   // ============================================================
 
@@ -178,7 +364,11 @@ function Dashboard() {
     return (
       <div style={styles.page}>
         <div style={styles.loading}>
-          Loading HOD Dashboard...
+          <FaSpinner style={styles.spinner} />
+
+          <p>
+            Loading HOD Dashboard...
+          </p>
         </div>
       </div>
     );
@@ -203,8 +393,7 @@ function Dashboard() {
           </h1>
 
           <p style={styles.subtitle}>
-            Overview of promotion activities in your
-            department.
+            Overview of promotion activities in your department.
           </p>
         </div>
 
@@ -222,10 +411,61 @@ function Dashboard() {
 
 
       {/* ======================================================
+          ERROR
+      ====================================================== */}
+
+      {error && (
+        <div style={styles.errorBox}>
+
+          <FaTimesCircle />
+
+          <span>
+            {error}
+          </span>
+
+          <button
+            style={styles.retryButton}
+            onClick={fetchApplications}
+          >
+            Retry
+          </button>
+
+        </div>
+      )}
+
+
+      {/* ======================================================
           STATISTICS
       ====================================================== */}
 
       <div style={styles.cards}>
+
+        {/* TOTAL */}
+
+        <div style={styles.card}>
+
+          <div
+            style={{
+              ...styles.iconBox,
+              background: "#eef2ff",
+              color: "#4f46e5",
+            }}
+          >
+            <FaClipboardList />
+          </div>
+
+          <div>
+            <p style={styles.cardTitle}>
+              Total Applications
+            </p>
+
+            <h2 style={styles.number}>
+              {totalApplications}
+            </h2>
+          </div>
+
+        </div>
+
 
         {/* PENDING */}
 
@@ -371,7 +611,9 @@ function Dashboard() {
         </div>
 
 
-        {/* TABLE */}
+        {/* ====================================================
+            TABLE
+        ==================================================== */}
 
         <div style={styles.tableWrapper}>
 
@@ -430,34 +672,51 @@ function Dashboard() {
                         {index + 1}
                       </td>
 
+
                       <td style={styles.td}>
 
-                        <strong>
-                          {getApplicantName(app)}
-                        </strong>
+                        <div
+                          style={styles.applicantCell}
+                        >
+
+                          <div style={styles.avatar}>
+                            {getApplicantName(app)
+                              .charAt(0)
+                              .toUpperCase()}
+                          </div>
+
+                          <strong>
+                            {getApplicantName(app)}
+                          </strong>
+
+                        </div>
 
                       </td>
 
-                      <td style={styles.td}>
-                        {app.current_title_name ||
-                          "—"}
-                      </td>
 
                       <td style={styles.td}>
-                        {app.targeted_title_name ||
-                          "—"}
+                        {getCurrentPosition(app)}
                       </td>
+
+
+                      <td style={styles.td}>
+                        {getTargetPosition(app)}
+                      </td>
+
 
                       <td style={styles.td}>
                         {formatDate(
                           app.created_at ||
-                          app.submitted_at
+                            app.submitted_at ||
+                            app.application_date
                         )}
                       </td>
+
 
                       <td style={styles.td}>
                         {getStatus(app)}
                       </td>
+
 
                       <td style={styles.td}>
 
@@ -469,8 +728,11 @@ function Dashboard() {
                             )
                           }
                         >
+
                           <FaEye />
+
                           View
+
                         </button>
 
                       </td>
@@ -494,9 +756,15 @@ function Dashboard() {
                     />
 
                     <p>
-                      No promotion applications
-                      found.
+                      No promotion applications found.
                     </p>
+
+                    <button
+                      style={styles.emptyButton}
+                      onClick={fetchApplications}
+                    >
+                      Refresh
+                    </button>
 
                   </td>
 
@@ -566,7 +834,7 @@ const styles = {
   cards: {
     display: "grid",
     gridTemplateColumns:
-      "repeat(4, 1fr)",
+      "repeat(5, minmax(180px, 1fr))",
     gap: "18px",
     marginBottom: "28px",
   },
@@ -580,6 +848,7 @@ const styles = {
     gap: "16px",
     boxShadow:
       "0 2px 8px rgba(0,0,0,0.06)",
+    minHeight: "85px",
   },
 
   iconBox: {
@@ -661,6 +930,7 @@ const styles = {
     fontSize: "12px",
     borderBottom:
       "1px solid #e2e8f0",
+    whiteSpace: "nowrap",
   },
 
   tr: {
@@ -673,6 +943,25 @@ const styles = {
     fontSize: "13px",
   },
 
+  applicantCell: {
+    display: "flex",
+    alignItems: "center",
+    gap: "10px",
+  },
+
+  avatar: {
+    width: "34px",
+    height: "34px",
+    borderRadius: "50%",
+    background: "#dbeafe",
+    color: "#1d4ed8",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontWeight: "700",
+    flexShrink: 0,
+  },
+
   approved: {
     display: "inline-flex",
     alignItems: "center",
@@ -682,6 +971,19 @@ const styles = {
     background: "#dcfce7",
     color: "#166534",
     fontWeight: "600",
+    fontSize: "12px",
+  },
+
+  recommended: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "6px",
+    padding: "5px 9px",
+    borderRadius: "15px",
+    background: "#dcfce7",
+    color: "#15803d",
+    fontWeight: "600",
+    fontSize: "12px",
   },
 
   rejected: {
@@ -693,6 +995,7 @@ const styles = {
     background: "#fee2e2",
     color: "#991b1b",
     fontWeight: "600",
+    fontSize: "12px",
   },
 
   pending: {
@@ -704,6 +1007,7 @@ const styles = {
     background: "#fef3c7",
     color: "#92400e",
     fontWeight: "600",
+    fontSize: "12px",
   },
 
   review: {
@@ -715,6 +1019,7 @@ const styles = {
     background: "#dbeafe",
     color: "#1d4ed8",
     fontWeight: "600",
+    fontSize: "12px",
   },
 
   viewButton: {
@@ -736,6 +1041,15 @@ const styles = {
     color: "#94a3b8",
   },
 
+  emptyButton: {
+    border: "none",
+    background: "#2563eb",
+    color: "#ffffff",
+    padding: "8px 16px",
+    borderRadius: "6px",
+    cursor: "pointer",
+  },
+
   loading: {
     background: "#ffffff",
     padding: "50px",
@@ -744,6 +1058,31 @@ const styles = {
     color: "#64748b",
   },
 
+  spinner: {
+    fontSize: "28px",
+    animation: "spin 1s linear infinite",
+  },
+
+  errorBox: {
+    background: "#fef2f2",
+    color: "#991b1b",
+    padding: "14px 18px",
+    borderRadius: "8px",
+    marginBottom: "20px",
+    display: "flex",
+    alignItems: "center",
+    gap: "10px",
+  },
+
+  retryButton: {
+    marginLeft: "auto",
+    border: "none",
+    background: "#dc2626",
+    color: "#ffffff",
+    padding: "7px 14px",
+    borderRadius: "6px",
+    cursor: "pointer",
+  },
 };
 
 export default Dashboard;

@@ -386,7 +386,7 @@ class PromotionApplicationSerializer(
 
 
 # ============================================================
-# 8. PROMOTION MATERIAL
+# 8. PROMOTION MATERIAL SERIALIZER
 # APPENDIX 3 - PROMOTION CHECKLIST
 # ============================================================
 
@@ -394,6 +394,7 @@ class PromotionMaterialSerializer(serializers.ModelSerializer):
 
     # --------------------------------------------------------
     # Display material type
+    # Example: JOURNAL_ARTICLE -> Journal Articles
     # --------------------------------------------------------
 
     material_type_display = serializers.CharField(
@@ -402,13 +403,13 @@ class PromotionMaterialSerializer(serializers.ModelSerializer):
     )
 
     # --------------------------------------------------------
-    # Employee who owns the application
+    # Employee information
     # --------------------------------------------------------
 
     employee_name = serializers.SerializerMethodField()
 
     # --------------------------------------------------------
-    # Application information
+    # Application status
     # --------------------------------------------------------
 
     application_status = serializers.CharField(
@@ -417,15 +418,39 @@ class PromotionMaterialSerializer(serializers.ModelSerializer):
     )
 
     # --------------------------------------------------------
-    # Reviewer display
+    # Applicant full name
     # --------------------------------------------------------
 
-    reviewer_name = serializers.SerializerMethodField()
+    applicant_name = serializers.CharField(
+        source="application.full_name",
+        read_only=True
+    )
+
+    # --------------------------------------------------------
+    # Target position
+    # --------------------------------------------------------
+
+    targeted_title = serializers.CharField(
+        source="application.targeted_title.name",
+        read_only=True
+    )
+
+    # --------------------------------------------------------
+    # Current position
+    # --------------------------------------------------------
+
+    current_title = serializers.CharField(
+        source="application.current_title.name",
+        read_only=True
+    )
 
     class Meta:
         model = PromotionMaterial
 
         fields = [
+            # =================================================
+            # BASIC
+            # =================================================
             "id",
 
             # =================================================
@@ -435,26 +460,22 @@ class PromotionMaterialSerializer(serializers.ModelSerializer):
             "application_status",
 
             # =================================================
-            # EMPLOYEE
+            # APPLICANT
             # =================================================
             "employee_name",
+            "applicant_name",
+
+            # =================================================
+            # POSITION
+            # =================================================
+            "current_title",
+            "targeted_title",
 
             # =================================================
             # MATERIAL
             # =================================================
-            "reference_in_cv",
             "material_type",
             "material_type_display",
-            "title",
-            "journal_title",
-            "authors",
-            "publication_year",
-            "indexing",
-
-            # =================================================
-            # REVIEWER
-            # =================================================
-            "reviewer_name",
 
             # =================================================
             # POINTS
@@ -462,12 +483,12 @@ class PromotionMaterialSerializer(serializers.ModelSerializer):
             "points",
 
             # =================================================
-            # DOCUMENT
+            # SUPPORTING DOCUMENT
             # =================================================
             "document",
 
             # =================================================
-            # SYSTEM DATE
+            # DATE
             # =================================================
             "created_at",
         ]
@@ -476,11 +497,39 @@ class PromotionMaterialSerializer(serializers.ModelSerializer):
             "id",
             "application_status",
             "employee_name",
+            "applicant_name",
+            "current_title",
+            "targeted_title",
             "material_type_display",
-            "reviewer_name",
-            "points",
             "created_at",
         ]
+
+    # ========================================================
+    # EMPLOYEE NAME
+    # ========================================================
+
+    def get_employee_name(self, obj):
+
+        try:
+            employee = obj.application.employee
+
+            if not employee:
+                return ""
+
+            # Try common name fields safely
+            if hasattr(employee, "full_name") and employee.full_name:
+                return employee.full_name
+
+            if hasattr(employee, "user") and employee.user:
+                return (
+                    employee.user.get_full_name()
+                    or employee.user.username
+                )
+
+            return str(employee)
+
+        except Exception:
+            return ""
 
     # ========================================================
     # EMPLOYEE NAME
