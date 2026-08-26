@@ -180,23 +180,23 @@ function Sidebar() {
         icon: <FaFolderOpen />,
       },
 
-      {
-        path: "/hod/reviews",
-        label: "Reviews",
-        icon: <FaClipboardCheck />,
-      },
+      // {
+      //   path: "/hod/reviews",
+      //   label: "Reviews",
+      //   icon: <FaClipboardCheck />,
+      // },
 
-      {
-        path: "/hod/employees",
-        label: "Employees",
-        icon: <FaUsers />,
-      },
+      // {
+      //   path: "/hod/employees",
+      //   label: "Employees",
+      //   icon: <FaUsers />,
+      // },
 
-      {
-        path: "/hod/reports",
-        label: "Reports",
-        icon: <FaChartBar />,
-      },
+      // {
+      //   path: "/hod/reports",
+      //   label: "Reports",
+      //   icon: <FaChartBar />,
+      // },
 
       {
         path: "/hod/history",
@@ -222,17 +222,17 @@ function Sidebar() {
         icon: <FaFolderOpen />,
       },
 
-      {
-        path: "/dean/reviews",
-        label: "Reviews",
-        icon: <FaClipboardCheck />,
-      },
+      // {
+      //   path: "/dean/reviews",
+      //   label: "Reviews",
+      //   icon: <FaClipboardCheck />,
+      // },
 
-      {
-        path: "/dean/reports",
-        label: "Reports",
-        icon: <FaChartBar />,
-      },
+      // {
+      //   path: "/dean/reports",
+      //   label: "Reports",
+      //   icon: <FaChartBar />,
+      // },
 
       {
         path: "/dean/history",
@@ -326,9 +326,9 @@ function Sidebar() {
         <div>
           <h2>Promotion System</h2>
 
-          <p className="role-badge">
+          {/* <p className="role-badge">
             {roleNames[role] || "User"}
-          </p>
+          </p> */}
         </div>
       </div>
 
@@ -336,7 +336,7 @@ function Sidebar() {
           USER INFORMATION
       ====================================================== */}
 
-      <div className="sidebar-user">
+      {/* <div className="sidebar-user">
 
         <div className="user-avatar">
           {user?.first_name?.charAt(0)?.toUpperCase() ||
@@ -361,7 +361,7 @@ function Sidebar() {
 
         </div>
 
-      </div>
+      </div> */}
 
       {/* ======================================================
           NAVIGATION
@@ -369,9 +369,9 @@ function Sidebar() {
 
       <nav className="sidebar-navigation">
 
-        <p className="menu-title">
+        {/* <p className="menu-title">
           MAIN MENU
-        </p>
+        </p> */}
 
         <ul className="sidebar-menu">
 

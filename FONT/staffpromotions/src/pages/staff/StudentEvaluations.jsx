@@ -1132,7 +1132,7 @@ function PeerReviews() {
 
           {/* FOOTER */}
 
-          <div
+          {/* <div
             style={
               styles.footerNotice
             }
@@ -1147,7 +1147,7 @@ function PeerReviews() {
               They cannot be modified or
               deleted from this page.
             </p>
-          </div>
+          </div> */}
 
         </div>
       </div>

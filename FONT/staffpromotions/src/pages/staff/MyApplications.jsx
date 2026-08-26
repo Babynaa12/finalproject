@@ -1,16 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+
+import { useEffect, useState } from "react";
 import api from "../../services/api";
 
 function MyApplications() {
-  const storedUser = localStorage.getItem("user");
-
-  let user = null;
-
-  try {
-    user = storedUser ? JSON.parse(storedUser) : null;
-  } catch (error) {
-    console.error("Invalid user data:", error);
-  }
+  const user = JSON.parse(localStorage.getItem("user"));
 
   const [applications, setApplications] = useState([]);
   const [selectedApplication, setSelectedApplication] = useState(null);
@@ -18,12 +11,16 @@ function MyApplications() {
 
   const [loading, setLoading] = useState(true);
   const [loadingMaterials, setLoadingMaterials] = useState(false);
+
   const [error, setError] = useState("");
-  const [refreshing, setRefreshing] = useState(false);
 
   // ============================================================
-  // TOKEN
+  // FETCH MY APPLICATIONS
   // ============================================================
+
+  useEffect(() => {
+    fetchMyApplications();
+  }, []);
 
   const getToken = () => {
     return (
@@ -32,34 +29,60 @@ function MyApplications() {
     );
   };
 
-  // ============================================================
-  // USER IDENTIFIERS
-  // ============================================================
+  const fetchMyApplications = async () => {
+    try {
+      setLoading(true);
+      setError("");
 
-  const getUserIds = () => {
-    const ids = [];
+      const token = getToken();
 
-    const values = [
-      user?.id,
-      user?.user_id,
-      user?.employee_id,
-      user?.employee?.id,
-      user?.employee?.employee_id,
-      user?.profile?.id,
-      user?.profile?.employee_id,
-    ];
-
-    values.forEach((value) => {
-      if (
-        value !== undefined &&
-        value !== null &&
-        value !== ""
-      ) {
-        ids.push(String(value));
+      if (!token) {
+        setError("Authentication token not found.");
+        return;
       }
-    });
 
-    return [...new Set(ids)];
+      const res = await api.get("/api/applications/", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      console.log("MY APPLICATIONS:", res.data);
+
+      const data = Array.isArray(res.data)
+        ? res.data
+        : Array.isArray(res.data?.results)
+        ? res.data.results
+        : [];
+
+      // --------------------------------------------------------
+      // FILTER CURRENT STAFF
+      // --------------------------------------------------------
+
+      const myApps = data.filter((app) => {
+        return (
+          String(app.employee) === String(user?.id) ||
+          String(app.employee_id) === String(user?.id) ||
+          String(app.user) === String(user?.id) ||
+          String(app.user_id) === String(user?.id)
+        );
+      });
+
+      setApplications(myApps);
+
+    } catch (err) {
+      console.error(
+        "Failed to load applications:",
+        err.response?.data || err
+      );
+
+      setError(
+        err.response?.data?.detail ||
+        "Failed to load your promotion records."
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   // ============================================================
@@ -70,92 +93,24 @@ function MyApplications() {
     return String(value || "")
       .trim()
       .toLowerCase()
-      .replace(/_/g, " ")
-      .replace(/-/g, " ");
+      .replace(/_/g, " ");
   };
 
   // ============================================================
-  // APPLICATION EMPLOYEE IDS
+  // CHECKLIST
   // ============================================================
 
-  const getApplicationEmployeeIds = (app) => {
-    const ids = [];
-
-    const employee = app?.employee;
-
-    const values = [
-      app?.employee_id,
-      app?.employee,
-      app?.user,
-      app?.user_id,
-      app?.applicant_id,
-
-      employee?.id,
-      employee?.employee_id,
-      employee?.user_id,
-      employee?.user,
-
-      employee?.profile?.id,
-      employee?.profile?.user_id,
-    ];
-
-    values.forEach((value) => {
-      if (
-        value !== undefined &&
-        value !== null &&
-        value !== "" &&
-        typeof value !== "object"
-      ) {
-        ids.push(String(value));
-      }
-    });
-
-    return [...new Set(ids)];
-  };
-
-  // ============================================================
-  // CHECK CURRENT USER
-  // ============================================================
-
-  const belongsToCurrentUser = (app) => {
-    const userIds = getUserIds();
-
-    if (!userIds.length) {
-      return false;
-    }
-
-    const applicationIds = getApplicationEmployeeIds(app);
-
-    return applicationIds.some((id) =>
-      userIds.includes(String(id))
-    );
-  };
-
-  // ============================================================
-  // FETCH APPLICATIONS
-  // ============================================================
-
-  useEffect(() => {
-    fetchMyApplications();
-  }, []);
-
-  const fetchMyApplications = async () => {
+  const viewChecklist = async (application) => {
     try {
-      setLoading(true);
-      setRefreshing(true);
+      setSelectedApplication(application);
+      setLoadingMaterials(true);
+      setMaterials([]);
       setError("");
 
       const token = getToken();
 
-      if (!token) {
-        setError(
-          "Authentication token was not found. Please login again."
-        );
-        return;
-      }
-
-      const response = await api.get(
-        "/api/applications/",
+      const res = await api.get(
+        `/api/promotion-materials/?application=${application.id}`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -163,528 +118,231 @@ function MyApplications() {
         }
       );
 
-      let data = [];
+      const data = Array.isArray(res.data)
+        ? res.data
+        : Array.isArray(res.data?.results)
+        ? res.data.results
+        : [];
 
-      if (Array.isArray(response.data)) {
-        data = response.data;
-      } else if (Array.isArray(response.data?.results)) {
-        data = response.data.results;
-      } else if (Array.isArray(response.data?.data)) {
-        data = response.data.data;
-      }
+      setMaterials(data);
 
-      console.log("All applications:", data);
-      console.log("Logged user:", user);
-      console.log("User IDs:", getUserIds());
-
-      const myApplications = data.filter(
-        belongsToCurrentUser
-      );
-
-      // ========================================================
-      // FALLBACK FOR USER-SPECIFIC ENDPOINT
-      // ========================================================
-
-      if (
-        myApplications.length === 0 &&
-        data.length === 1
-      ) {
-        const single = data[0];
-
-        const employee = single?.employee;
-
-        if (
-          employee &&
-          typeof employee === "object"
-        ) {
-          const employeeName =
-            employee.full_name ||
-            employee.name ||
-            employee.username;
-
-          const loggedName =
-            user?.full_name ||
-            user?.name ||
-            user?.username;
-
-          if (
-            employeeName &&
-            loggedName &&
-            normalize(employeeName) ===
-              normalize(loggedName)
-          ) {
-            myApplications.push(single);
-          }
-        }
-      }
-
-      console.log(
-        "My promotion applications:",
-        myApplications
-      );
-
-      setApplications(myApplications);
     } catch (err) {
       console.error(
-        "Failed to load applications:",
+        "Failed to load checklist:",
         err.response?.data || err
       );
 
-      if (err.response?.status === 401) {
-        setError(
-          "Your login session has expired. Please login again."
-        );
-      } else if (err.response?.status === 403) {
-        setError(
-          "You do not have permission to view promotion applications."
-        );
-      } else {
-        setError(
-          err.response?.data?.detail ||
-            err.response?.data?.message ||
-            "Failed to load your promotion application."
-        );
-      }
+      setMaterials([]);
+
+      setError(
+        "Unable to load the promotion checklist."
+      );
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      setLoadingMaterials(false);
     }
   };
 
+  const closeChecklist = () => {
+    setSelectedApplication(null);
+    setMaterials([]);
+  };
+
   // ============================================================
-  // APPLICATION STATUS
+  // STATUS CLASS
   // ============================================================
 
-  const getApplicationStatus = (app) => {
-    return (
-      app?.status ||
-      app?.application_status ||
-      "DRAFT"
+  const getStatusClass = (status) => {
+    const value = normalize(status);
+
+    if (!value) {
+      return "status pending";
+    }
+
+    if (
+      value.includes("approved") ||
+      value.includes("recommend") ||
+      value.includes("accepted") ||
+      value.includes("completed") ||
+      value.includes("complete") ||
+      value.includes("passed")
+    ) {
+      return "status approved";
+    }
+
+    if (
+      value.includes("reject") ||
+      value.includes("declined") ||
+      value.includes("failed") ||
+      value.includes("not recommended")
+    ) {
+      return "status rejected";
+    }
+
+    if (
+      value.includes("review") ||
+      value.includes("pending") ||
+      value.includes("waiting") ||
+      value.includes("submitted")
+    ) {
+      return "status review";
+    }
+
+    return "status pending";
+  };
+
+  // ============================================================
+  // GET VALUE FROM MULTIPLE POSSIBLE FIELDS
+  // ============================================================
+
+  const firstValue = (app, fields, defaultValue = "") => {
+    for (const field of fields) {
+      if (
+        app[field] !== undefined &&
+        app[field] !== null &&
+        app[field] !== ""
+      ) {
+        return app[field];
+      }
+    }
+
+    return defaultValue;
+  };
+
+  // ============================================================
+  // HOD
+  // ============================================================
+
+  const getHODStatus = (app) => {
+    return firstValue(
+      app,
+      [
+        "hod_recommendation",
+        "hod_status",
+        "hod_review_status",
+        "hod_decision",
+      ],
+      "Waiting"
     );
   };
 
   // ============================================================
-  // STATUS LABEL
+  // DEAN
   // ============================================================
 
-  const getStatusLabel = (status) => {
-    const labels = {
-      DRAFT: "Draft",
-      SUBMITTED: "Submitted",
-
-      HOD_REVIEW: "HOD Review",
-
-      DEAN_REVIEW: "Dean Review",
-
-      UNDER_REVIEW: "Academic Review",
-      REVIEWER_REVIEW: "Academic Review",
-      REVIEWER_COMPLETED: "Academic Review Completed",
-
-      STUDENT_REVIEW: "Student Review",
-      STUDENT_ACTION: "Student Action",
-      STUDENT_ACKNOWLEDGEMENT:
-        "Student Acknowledgement",
-
-      COMMITTEE_REVIEW:
-        "Promotion Committee Review",
-
-      APPROVED: "Approved",
-      REJECTED: "Rejected",
-      APPEALED: "Appealed",
-    };
-
-    return (
-      labels[status] ||
-      String(status || "Pending")
-        .replace(/_/g, " ")
+  const getDeanStatus = (app) => {
+    return firstValue(
+      app,
+      [
+        "dean_recommendation",
+        "dean_status",
+        "dean_review_status",
+        "dean_decision",
+      ],
+      "Waiting"
     );
   };
 
   // ============================================================
-  // WORKFLOW
+  // REVIEWER
   // ============================================================
 
-  const stages = [
-    {
-      key: "submitted",
-      title: "Submitted",
-      shortTitle: "Submitted",
-      description:
-        "Application submitted by staff member.",
-    },
-
-    {
-      key: "hod",
-      title: "HOD",
-      shortTitle: "HOD",
-      description:
-        "Head of Department reviews and recommends the application.",
-    },
-
-    {
-      key: "dean",
-      title: "Dean",
-      shortTitle: "Dean",
-      description:
-        "Dean reviews the departmental recommendation.",
-    },
-
-    {
-      key: "reviewer",
-      title: "Reviewer",
-      shortTitle: "Reviewer",
-      description:
-        "Assigned academic reviewer assesses the promotion materials.",
-    },
-
-    {
-      key: "student",
-      title: "Student",
-      shortTitle: "Student",
-      description:
-        "Applicant receives and acknowledges the academic review.",
-    },
-
-    {
-      key: "committee",
-      title: "Committee",
-      shortTitle: "Committee",
-      description:
-        "Promotion Committee considers the application.",
-    },
-
-    {
-      key: "final",
-      title: "Final",
-      shortTitle: "Final",
-      description:
-        "Final promotion decision is recorded.",
-    },
-  ];
-
-  // ============================================================
-  // CURRENT STAGE
-  // ============================================================
-
-  const getCurrentStageIndex = (app) => {
-    const status = getApplicationStatus(app);
-
-    switch (status) {
-      case "DRAFT":
-        return 0;
-
-      case "SUBMITTED":
-        return 0;
-
-      case "HOD_REVIEW":
-        return 1;
-
-      case "DEAN_REVIEW":
-        return 2;
-
-      case "UNDER_REVIEW":
-      case "REVIEWER_REVIEW":
-        return 3;
-
-      case "REVIEWER_COMPLETED":
-      case "STUDENT_REVIEW":
-      case "STUDENT_ACTION":
-      case "STUDENT_ACKNOWLEDGEMENT":
-        return 4;
-
-      case "COMMITTEE_REVIEW":
-        return 5;
-
-      case "APPROVED":
-      case "REJECTED":
-      case "APPEALED":
-        return 6;
-
-      default:
-        return 0;
-    }
+  const getReviewerStatus = (app) => {
+    return firstValue(
+      app,
+      [
+        "reviewer_recommendation",
+        "reviewer_status",
+        "review_status",
+        "reviewer_decision",
+        "academic_reviewer_status",
+      ],
+      "Waiting"
+    );
   };
 
   // ============================================================
-  // STAGE STATUS
+  // STUDENT EVALUATION
   // ============================================================
 
-  const getStageStatus = (app, key) => {
-    const status = getApplicationStatus(app);
-
-    switch (key) {
-      // --------------------------------------------------------
-      // SUBMITTED
-      // --------------------------------------------------------
-
-      case "submitted":
-        if (status === "DRAFT") {
-          return "Waiting";
-        }
-
-        return "Completed";
-
-      // --------------------------------------------------------
-      // HOD
-      // --------------------------------------------------------
-
-      case "hod":
-        if (
-          ["DRAFT", "SUBMITTED"].includes(status)
-        ) {
-          return "Waiting";
-        }
-
-        if (
-          [
-            "DEAN_REVIEW",
-            "UNDER_REVIEW",
-            "REVIEWER_REVIEW",
-            "REVIEWER_COMPLETED",
-            "STUDENT_REVIEW",
-            "STUDENT_ACTION",
-            "STUDENT_ACKNOWLEDGEMENT",
-            "COMMITTEE_REVIEW",
-            "APPROVED",
-          ].includes(status)
-        ) {
-          return (
-            app?.hod_recommendation ||
-            app?.hod_status ||
-            "Completed"
-          );
-        }
-
-        if (status === "REJECTED") {
-          return (
-            app?.hod_recommendation ||
-            app?.hod_status ||
-            "Rejected"
-          );
-        }
-
-        return "In Progress";
-
-      // --------------------------------------------------------
-      // DEAN
-      // --------------------------------------------------------
-
-      case "dean":
-        if (
-          [
-            "DRAFT",
-            "SUBMITTED",
-            "HOD_REVIEW",
-          ].includes(status)
-        ) {
-          return "Waiting";
-        }
-
-        if (
-          [
-            "UNDER_REVIEW",
-            "REVIEWER_REVIEW",
-            "REVIEWER_COMPLETED",
-            "STUDENT_REVIEW",
-            "STUDENT_ACTION",
-            "STUDENT_ACKNOWLEDGEMENT",
-            "COMMITTEE_REVIEW",
-            "APPROVED",
-          ].includes(status)
-        ) {
-          return (
-            app?.dean_recommendation ||
-            app?.dean_status ||
-            "Completed"
-          );
-        }
-
-        if (status === "REJECTED") {
-          return (
-            app?.dean_recommendation ||
-            app?.dean_status ||
-            "Rejected"
-          );
-        }
-
-        return "In Progress";
-
-      // --------------------------------------------------------
-      // REVIEWER
-      // --------------------------------------------------------
-
-      case "reviewer":
-        if (
-          [
-            "DRAFT",
-            "SUBMITTED",
-            "HOD_REVIEW",
-            "DEAN_REVIEW",
-          ].includes(status)
-        ) {
-          return "Waiting";
-        }
-
-        if (
-          [
-            "REVIEWER_COMPLETED",
-            "STUDENT_REVIEW",
-            "STUDENT_ACTION",
-            "STUDENT_ACKNOWLEDGEMENT",
-            "COMMITTEE_REVIEW",
-            "APPROVED",
-          ].includes(status)
-        ) {
-          return (
-            app?.reviewer_recommendation ||
-            app?.reviewer_status ||
-            app?.review_status ||
-            "Completed"
-          );
-        }
-
-        if (
-          status === "REJECTED"
-        ) {
-          return (
-            app?.reviewer_recommendation ||
-            app?.reviewer_status ||
-            "Rejected"
-          );
-        }
-
-        return "In Progress";
-
-      // --------------------------------------------------------
-      // STUDENT
-      // --------------------------------------------------------
-
-      case "student":
-        if (
-          [
-            "DRAFT",
-            "SUBMITTED",
-            "HOD_REVIEW",
-            "DEAN_REVIEW",
-            "UNDER_REVIEW",
-            "REVIEWER_REVIEW",
-          ].includes(status)
-        ) {
-          return "Waiting";
-        }
-
-        if (
-          [
-            "COMMITTEE_REVIEW",
-            "APPROVED",
-          ].includes(status)
-        ) {
-          return (
-            app?.student_status ||
-            app?.student_action_status ||
-            app?.applicant_acknowledgement ||
-            "Completed"
-          );
-        }
-
-        if (
-          [
-            "STUDENT_REVIEW",
-            "STUDENT_ACTION",
-            "STUDENT_ACKNOWLEDGEMENT",
-          ].includes(status)
-        ) {
-          return (
-            app?.student_status ||
-            app?.student_action_status ||
-            app?.applicant_acknowledgement ||
-            "In Progress"
-          );
-        }
-
-        if (status === "REJECTED") {
-          return (
-            app?.student_status ||
-            "Rejected"
-          );
-        }
-
-        return "Waiting";
-
-      // --------------------------------------------------------
-      // COMMITTEE
-      // --------------------------------------------------------
-
-      case "committee":
-        if (
-          [
-            "DRAFT",
-            "SUBMITTED",
-            "HOD_REVIEW",
-            "DEAN_REVIEW",
-            "UNDER_REVIEW",
-            "REVIEWER_REVIEW",
-            "REVIEWER_COMPLETED",
-            "STUDENT_REVIEW",
-            "STUDENT_ACTION",
-            "STUDENT_ACKNOWLEDGEMENT",
-          ].includes(status)
-        ) {
-          return "Waiting";
-        }
-
-        if (status === "APPROVED") {
-          return (
-            app?.committee_recommendation ||
-            app?.committee_status ||
-            "Completed"
-          );
-        }
-
-        if (status === "REJECTED") {
-          return (
-            app?.committee_recommendation ||
-            app?.committee_status ||
-            "Rejected"
-          );
-        }
-
-        if (status === "COMMITTEE_REVIEW") {
-          return (
-            app?.committee_recommendation ||
-            app?.committee_status ||
-            "In Progress"
-          );
-        }
-
-        return "Waiting";
-
-      // --------------------------------------------------------
-      // FINAL
-      // --------------------------------------------------------
-
-      case "final":
-        if (status === "APPROVED") {
-          return "Approved";
-        }
-
-        if (status === "REJECTED") {
-          return "Rejected";
-        }
-
-        if (status === "APPEALED") {
-          return "Appealed";
-        }
-
-        return "Waiting";
-
-      default:
-        return "Waiting";
-    }
+  const getStudentStatus = (app) => {
+    return firstValue(
+      app,
+      [
+        "student_evaluation_status",
+        "student_evaluation",
+        "student_review_status",
+        "teaching_evaluation_status",
+        "student_evaluation_result",
+      ],
+      "Waiting"
+    );
   };
 
   // ============================================================
-  // STATUS HELPERS
+  // COMMITTEE
+  // ============================================================
+
+  const getCommitteeStatus = (app) => {
+    return firstValue(
+      app,
+      [
+        "committee_recommendation",
+        "committee_status",
+        "committee_decision",
+        "promotion_committee_status",
+        "board_status",
+        "board_decision",
+      ],
+      "Waiting"
+    );
+  };
+
+  // ============================================================
+  // FINAL STATUS
+  // ============================================================
+
+  const getFinalStatus = (app) => {
+    return firstValue(
+      app,
+      [
+        "final_status",
+        "final_decision",
+        "promotion_decision",
+        "status",
+      ],
+      "Pending"
+    );
+  };
+
+  // ============================================================
+  // OVERALL STATUS
+  // ============================================================
+
+  const getOverallStatus = (app) => {
+    return getFinalStatus(app);
+  };
+
+  // ============================================================
+  // CHECK WHETHER STAGE IS COMPLETED
+  // ============================================================
+
+  const isCompleted = (value) => {
+    const status = normalize(value);
+
+    if (!status) return false;
+
+    return (
+      status.includes("approved") ||
+      status.includes("recommended") ||
+      status.includes("accepted") ||
+      status.includes("completed") ||
+      status.includes("complete") ||
+      status.includes("passed")
+    );
+  };
+
+  // ============================================================
+  // CHECK WHETHER STAGE IS REJECTED
   // ============================================================
 
   const isRejected = (value) => {
@@ -698,93 +356,117 @@ function MyApplications() {
     );
   };
 
-  const isCompleted = (value) => {
-    const status = normalize(value);
-
-    return (
-      status === "completed" ||
-      status === "complete" ||
-      status === "done" ||
-      status === "approved" ||
-      status === "accepted" ||
-      status === "passed" ||
-      status === "finished"
-    );
-  };
-
-  const getStatusClass = (value) => {
-    const status = normalize(value);
-
-    if (isRejected(status)) {
-      return "status rejected";
-    }
-
-    if (
-      isCompleted(status) ||
-      status.includes("approved") ||
-      status.includes("completed")
-    ) {
-      return "status approved";
-    }
-
-    if (
-      status.includes("review") ||
-      status.includes("progress") ||
-      status.includes("submitted") ||
-      status.includes("appealed") ||
-      status.includes("action")
-    ) {
-      return "status review";
-    }
-
-    return "status pending";
-  };
-
   // ============================================================
-  // CURRENT STAGE TEXT
+  // CURRENT STAGE
   // ============================================================
 
   const getCurrentStage = (app) => {
-    const status = getApplicationStatus(app);
+    const finalStatus = getFinalStatus(app);
 
-    switch (status) {
-      case "DRAFT":
-        return "Draft";
-
-      case "SUBMITTED":
-        return "HOD";
-
-      case "HOD_REVIEW":
-        return "HOD";
-
-      case "DEAN_REVIEW":
-        return "Dean";
-
-      case "UNDER_REVIEW":
-      case "REVIEWER_REVIEW":
-        return "Academic Reviewer";
-
-      case "REVIEWER_COMPLETED":
-      case "STUDENT_REVIEW":
-      case "STUDENT_ACTION":
-      case "STUDENT_ACKNOWLEDGEMENT":
-        return "Student";
-
-      case "COMMITTEE_REVIEW":
-        return "Promotion Committee";
-
-      case "APPROVED":
-        return "Promotion Approved";
-
-      case "REJECTED":
-        return "Promotion Rejected";
-
-      case "APPEALED":
-        return "Appeal Under Consideration";
-
-      default:
-        return getStatusLabel(status);
+    if (isCompleted(finalStatus)) {
+      return "Promotion Approved";
     }
+
+    if (isRejected(finalStatus)) {
+      return "Promotion Rejected";
+    }
+
+    const committee = getCommitteeStatus(app);
+
+    if (
+      committee !== "Waiting" &&
+      !isCompleted(committee) &&
+      !isRejected(committee)
+    ) {
+      return "Promotion Committee";
+    }
+
+    if (isCompleted(committee)) {
+      return "Final Decision";
+    }
+
+    const student = getStudentStatus(app);
+
+    if (
+      student !== "Waiting" &&
+      !isCompleted(student) &&
+      !isRejected(student)
+    ) {
+      return "Student Evaluation";
+    }
+
+    if (isCompleted(student)) {
+      return "Promotion Committee";
+    }
+
+    const reviewer = getReviewerStatus(app);
+
+    if (
+      reviewer !== "Waiting" &&
+      !isCompleted(reviewer) &&
+      !isRejected(reviewer)
+    ) {
+      return "Reviewer Assessment";
+    }
+
+    if (isCompleted(reviewer)) {
+      return "Student Evaluation";
+    }
+
+    const dean = getDeanStatus(app);
+
+    if (
+      dean !== "Waiting" &&
+      !isCompleted(dean) &&
+      !isRejected(dean)
+    ) {
+      return "Dean Review";
+    }
+
+    if (isCompleted(dean)) {
+      return "Reviewer Assessment";
+    }
+
+    const hod = getHODStatus(app);
+
+    if (
+      hod !== "Waiting" &&
+      !isCompleted(hod) &&
+      !isRejected(hod)
+    ) {
+      return "HOD Review";
+    }
+
+    if (isCompleted(hod)) {
+      return "Dean Review";
+    }
+
+    return "HOD Review";
+  };
+
+  // ============================================================
+  // TOTAL POINTS
+  // ============================================================
+
+  const getTotalPoints = (app) => {
+    const possibleFields = [
+      app.total_points,
+      app.total_material_points,
+      app.total_score,
+      app.points,
+    ];
+
+    for (const value of possibleFields) {
+      if (
+        value !== null &&
+        value !== undefined &&
+        value !== ""
+      ) {
+        return Number(value).toFixed(2);
+      }
+    }
+
+    return "0.00";
   };
 
   // ============================================================
@@ -793,49 +475,50 @@ function MyApplications() {
 
   const getApplicantName = (app) => {
     return (
-      app?.full_name ||
-      app?.employee_name ||
-      app?.applicant_name ||
-      app?.employee?.full_name ||
-      app?.employee?.name ||
-      app?.employee?.username ||
-      user?.full_name ||
-      user?.name ||
-      user?.username ||
+      app.employee_name ||
+      app.applicant_name ||
+      app.employee?.full_name ||
+      app.employee?.name ||
+      app.employee?.username ||
+      app.user?.full_name ||
+      app.user?.name ||
+      app.user?.username ||
       "Staff Member"
     );
   };
 
   // ============================================================
-  // CURRENT POSITION
+  // DOCUMENT URL
+  // ============================================================
+
+  const getDocumentUrl = (document) => {
+    if (!document) return null;
+
+    if (document.startsWith("http")) {
+      return document;
+    }
+
+    return `http://127.0.0.1:8000${document}`;
+  };
+
+  // ============================================================
+  // POSITION
   // ============================================================
 
   const getCurrentPosition = (app) => {
     return (
-      app?.current_title_name ||
-      app?.current_title?.title_name ||
-      app?.current_title?.name ||
-      app?.present_position_name ||
-      app?.present_position?.title_name ||
-      app?.present_position?.name ||
-      app?.current_position ||
+      app.current_title_name ||
+      app.current_title?.title_name ||
+      app.current_position ||
       "N/A"
     );
   };
 
-  // ============================================================
-  // TARGET POSITION
-  // ============================================================
-
   const getTargetPosition = (app) => {
     return (
-      app?.targeted_title_name ||
-      app?.targeted_title?.title_name ||
-      app?.targeted_title?.name ||
-      app?.position_applied_for_name ||
-      app?.position_applied_for?.title_name ||
-      app?.position_applied_for?.name ||
-      app?.target_position ||
+      app.targeted_title_name ||
+      app.targeted_title?.title_name ||
+      app.target_position ||
       "N/A"
     );
   };
@@ -845,9 +528,7 @@ function MyApplications() {
   // ============================================================
 
   const formatDate = (date) => {
-    if (!date) {
-      return "N/A";
-    }
+    if (!date) return "N/A";
 
     const parsed = new Date(date);
 
@@ -863,243 +544,130 @@ function MyApplications() {
   };
 
   // ============================================================
-  // TOTAL POINTS
+  // PROGRESS STAGE
   // ============================================================
 
-  const getTotalPoints = (app) => {
-    const values = [
-      app?.total_points,
-      app?.total_material_points,
-      app?.total_score,
-      app?.points,
-    ];
+  const stages = [
+    {
+      key: "submitted",
+      title: "Submitted",
+    },
+    {
+      key: "hod",
+      title: "HOD",
+    },
+    {
+      key: "dean",
+      title: "Dean",
+    },
+    {
+      key: "reviewer",
+      title: "Reviewer",
+    },
+    {
+      key: "student",
+      title: "Student Evaluation",
+    },
+    {
+      key: "committee",
+      title: "Committee",
+    },
+    {
+      key: "final",
+      title: "Final Decision",
+    },
+  ];
 
-    for (const value of values) {
-      if (
-        value !== undefined &&
-        value !== null &&
-        value !== ""
-      ) {
-        const number = Number(value);
+  const getStageStatus = (app, key) => {
+    switch (key) {
+      case "submitted":
+        return "Submitted";
 
-        if (!Number.isNaN(number)) {
-          return number.toFixed(2);
-        }
-      }
-    }
+      case "hod":
+        return getHODStatus(app);
 
-    return "0.00";
-  };
+      case "dean":
+        return getDeanStatus(app);
 
-  // ============================================================
-  // DOCUMENT URL
-  // ============================================================
+      case "reviewer":
+        return getReviewerStatus(app);
 
-  const getDocumentUrl = (document) => {
-    if (!document) {
-      return null;
-    }
+      case "student":
+        return getStudentStatus(app);
 
-    if (typeof document === "object") {
-      document =
-        document.url ||
-        document.file ||
-        document.document;
-    }
+      case "committee":
+        return getCommitteeStatus(app);
 
-    if (!document) {
-      return null;
-    }
+      case "final":
+        return getFinalStatus(app);
 
-    if (
-      String(document).startsWith("http")
-    ) {
-      return document;
-    }
-
-    return `http://127.0.0.1:8000${
-      String(document).startsWith("/")
-        ? document
-        : `/${document}`
-    }`;
-  };
-
-  // ============================================================
-  // CV
-  // ============================================================
-
-  const getCV = (app) => {
-    return (
-      app?.cv ||
-      app?.cv_url ||
-      null
-    );
-  };
-
-  // ============================================================
-  // ADDITIONAL DOCUMENT
-  // ============================================================
-
-  const getAdditionalDocument = (app) => {
-    return (
-      app?.additional_documents ||
-      app?.additional_documents_url ||
-      null
-    );
-  };
-
-  // ============================================================
-  // REVIEWER
-  // ============================================================
-
-  const getReviewerName = (app) => {
-    return (
-      app?.assigned_reviewer?.full_name ||
-      app?.assigned_reviewer?.name ||
-      app?.assigned_reviewer?.username ||
-      app?.reviewer?.full_name ||
-      app?.reviewer?.name ||
-      app?.reviewer?.username ||
-      "Academic Reviewer"
-    );
-  };
-
-  // ============================================================
-  // HOD
-  // ============================================================
-
-  const getHODName = (app) => {
-    return (
-      app?.hod?.full_name ||
-      app?.hod?.name ||
-      app?.hod?.username ||
-      app?.hod_name ||
-      "HOD"
-    );
-  };
-
-  // ============================================================
-  // DEAN
-  // ============================================================
-
-  const getDeanName = (app) => {
-    return (
-      app?.dean?.full_name ||
-      app?.dean?.name ||
-      app?.dean?.username ||
-      app?.dean_name ||
-      "Dean"
-    );
-  };
-
-  // ============================================================
-  // CHECKLIST / PROMOTION MATERIALS
-  //
-  // Matches:
-  //
-  // PromotionMaterialSerializer
-  //
-  // material_type
-  // material_type_display
-  // points
-  // document
-  // ============================================================
-
-  const viewChecklist = async (application) => {
-    try {
-      setSelectedApplication(application);
-      setLoadingMaterials(true);
-      setMaterials([]);
-      setError("");
-
-      const token = getToken();
-
-      if (!token) {
-        setError(
-          "Authentication token was not found."
-        );
-        return;
-      }
-
-      const response = await api.get(
-        `/api/promotion-materials/?application=${application.id}`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-
-      let data = [];
-
-      if (Array.isArray(response.data)) {
-        data = response.data;
-      } else if (
-        Array.isArray(response.data?.results)
-      ) {
-        data = response.data.results;
-      } else if (
-        Array.isArray(response.data?.data)
-      ) {
-        data = response.data.data;
-      }
-
-      console.log(
-        "Promotion materials:",
-        data
-      );
-
-      setMaterials(data);
-    } catch (err) {
-      console.error(
-        "Failed to load promotion materials:",
-        err.response?.data || err
-      );
-
-      setMaterials([]);
-
-      setError(
-        "Unable to load the promotion checklist."
-      );
-    } finally {
-      setLoadingMaterials(false);
+      default:
+        return "Waiting";
     }
   };
 
   // ============================================================
-  // CLOSE CHECKLIST
+  // STAGE INDEX
   // ============================================================
 
-  const closeChecklist = () => {
-    setSelectedApplication(null);
-    setMaterials([]);
-  };
+  const getCurrentStageIndex = (app) => {
+    const final = getFinalStatus(app);
 
-  // ============================================================
-  // MATERIAL TOTAL
-  // ============================================================
+    if (isCompleted(final) || isRejected(final)) {
+      return 6;
+    }
 
-  const materialTotal = useMemo(() => {
-    return materials
-      .reduce((total, material) => {
-        return (
-          total +
-          Number(material?.points || 0)
-        );
-      }, 0)
-      .toFixed(2);
-  }, [materials]);
+    const committee = getCommitteeStatus(app);
 
-  // ============================================================
-  // MATERIAL TYPE LABEL
-  // ============================================================
+    if (isCompleted(committee)) {
+      return 6;
+    }
 
-  const getMaterialName = (material) => {
-    return (
-      material?.material_type_display ||
-      material?.material_type ||
-      "Promotion Material"
-    );
+    if (committee !== "Waiting") {
+      return 5;
+    }
+
+    const student = getStudentStatus(app);
+
+    if (isCompleted(student)) {
+      return 5;
+    }
+
+    if (student !== "Waiting") {
+      return 4;
+    }
+
+    const reviewer = getReviewerStatus(app);
+
+    if (isCompleted(reviewer)) {
+      return 4;
+    }
+
+    if (reviewer !== "Waiting") {
+      return 3;
+    }
+
+    const dean = getDeanStatus(app);
+
+    if (isCompleted(dean)) {
+      return 3;
+    }
+
+    if (dean !== "Waiting") {
+      return 2;
+    }
+
+    const hod = getHODStatus(app);
+
+    if (isCompleted(hod)) {
+      return 2;
+    }
+
+    if (hod !== "Waiting") {
+      return 1;
+    }
+
+    return 1;
   };
 
   // ============================================================
@@ -1111,14 +679,7 @@ function MyApplications() {
       <div style={styles.page}>
         <div style={styles.loadingBox}>
           <div style={styles.spinner}></div>
-
-          <h3>
-            Loading Promotion Application
-          </h3>
-
-          <p>
-            Retrieving your promotion records...
-          </p>
+          <p>Loading your promotion records...</p>
         </div>
       </div>
     );
@@ -1134,111 +695,80 @@ function MyApplications() {
       {/* HEADER */}
 
       <div style={styles.header}>
-        <div>
-          <div style={styles.breadcrumb}>
-            Staff Portal / Promotion / My Application
-          </div>
 
-          <h1 style={styles.title}>
-            My Promotion Application
-          </h1>
+        <div>
+          <h2 style={styles.title}>
+            My Promotion Status
+          </h2>
 
           <p style={styles.subtitle}>
-            Track the progress of your promotion
-            application from submission through
-            HOD, Dean, Reviewer, Student,
-            Committee and Final Decision.
+            Track your promotion application from submission
+            through HOD, Dean, reviewers, student evaluation,
+            promotion committee and final decision.
           </p>
         </div>
 
         <button
           onClick={fetchMyApplications}
-          disabled={refreshing}
-          style={{
-            ...styles.refreshButton,
-            opacity: refreshing ? 0.6 : 1,
-          }}
+          style={styles.refreshButton}
         >
-          {refreshing
-            ? "Refreshing..."
-            : "↻ Refresh"}
+          ↻ Refresh
         </button>
+
       </div>
 
       {/* ERROR */}
 
       {error && (
-        <div style={styles.errorBox}>
-          <div>
-            <strong>
-              Unable to load application
-            </strong>
-
-            <p style={styles.errorText}>
-              {error}
-            </p>
-          </div>
+        <div style={styles.error}>
+          ⚠ {error}
 
           <button
             onClick={() => setError("")}
-            style={styles.errorClose}
+            style={styles.closeError}
           >
             ×
           </button>
         </div>
       )}
 
-      {/* STAFF CARD */}
+      {/* STAFF */}
 
       <div style={styles.staffCard}>
 
-        <div style={styles.staffAvatar}>
-          {(
-            user?.full_name ||
-            user?.name ||
-            user?.username ||
-            "S"
-          )
-            .charAt(0)
-            .toUpperCase()}
-        </div>
-
-        <div style={styles.staffMain}>
-          <span style={styles.label}>
+        <div>
+          <span style={styles.smallLabel}>
             STAFF MEMBER
           </span>
 
-          <h2 style={styles.staffName}>
+          <h3 style={styles.staffName}>
             {user?.full_name ||
               user?.name ||
-              user?.username ||
+              `${user?.first_name || ""} ${
+                user?.last_name || ""
+              }`.trim() ||
               "Staff Member"}
-          </h2>
+          </h3>
+        </div>
 
-          <p style={styles.staffEmail}>
-            {user?.email ||
-              "Email not available"}
+        <div>
+          <span style={styles.smallLabel}>
+            EMAIL
+          </span>
+
+          <p style={styles.staffValue}>
+            {user?.email || "N/A"}
           </p>
         </div>
 
-        <div style={styles.staffInfo}>
-          <span style={styles.label}>
+        <div>
+          <span style={styles.smallLabel}>
             ROLE
           </span>
 
-          <strong>
+          <p style={styles.staffValue}>
             {user?.role || "Staff"}
-          </strong>
-        </div>
-
-        <div style={styles.staffInfo}>
-          <span style={styles.label}>
-            APPLICATIONS
-          </span>
-
-          <strong style={styles.applicationCount}>
-            {applications.length}
-          </strong>
+          </p>
         </div>
 
       </div>
@@ -1247,56 +777,31 @@ function MyApplications() {
 
       {applications.length === 0 ? (
 
-        <div style={styles.emptyCard}>
+        <div style={styles.emptyBox}>
 
           <div style={styles.emptyIcon}>
-            📄
+            📋
           </div>
 
-          <h2>
-            No Promotion Application Found
-          </h2>
+          <h3>
+            No Promotion Submission Found
+          </h3>
 
           <p>
-            We could not find a promotion
-            application associated with your
-            staff account.
+            You have not submitted a promotion request yet.
           </p>
-
-          <p style={styles.emptyHint}>
-            If you have already submitted an
-            application, refresh the page or
-            contact the administrator.
-          </p>
-
-          <button
-            onClick={fetchMyApplications}
-            style={styles.primaryButton}
-          >
-            ↻ Check Again
-          </button>
 
         </div>
 
       ) : (
 
-        <div style={styles.applicationList}>
+        <div style={styles.cards}>
 
           {applications.map((app) => {
 
-            const status =
-              getApplicationStatus(app);
-
-            const currentStage =
-              getCurrentStage(app);
-
-            const currentIndex =
-              getCurrentStageIndex(app);
-
-            const cv = getCV(app);
-
-            const additional =
-              getAdditionalDocument(app);
+            const status = getOverallStatus(app);
+            const currentStage = getCurrentStage(app);
+            const currentIndex = getCurrentStageIndex(app);
 
             return (
 
@@ -1311,22 +816,18 @@ function MyApplications() {
 
                   <div>
 
-                    <div style={styles.applicationId}>
-                      APPLICATION #{app.id}
-                    </div>
+                    <span style={styles.applicationNumber}>
+                      PROMOTION APPLICATION #{app.id}
+                    </span>
 
-                    <h2 style={styles.positionTitle}>
+                    <h3 style={styles.positionTitle}>
                       {getCurrentPosition(app)}
-
-                      <span style={styles.arrow}>
-                        →
-                      </span>
-
+                      {" → "}
                       {getTargetPosition(app)}
-                    </h2>
+                    </h3>
 
-                    <p style={styles.dateText}>
-                      Submitted on{" "}
+                    <p style={styles.submittedDate}>
+                      Submitted:{" "}
                       {formatDate(
                         app.created_at ||
                         app.submitted_at ||
@@ -1336,57 +837,9 @@ function MyApplications() {
 
                   </div>
 
-                  <div
-                    className={getStatusClass(
-                      getStatusLabel(status)
-                    )}
-                  >
-                    {getStatusLabel(status)}
-                  </div>
-
-                </div>
-
-                {/* CURRENT STAGE */}
-
-                <div
-                  style={
-                    status === "APPROVED"
-                      ? styles.approvedBanner
-                      : status === "REJECTED"
-                      ? styles.rejectedBanner
-                      : styles.currentBanner
-                  }
-                >
-
-                  <div style={styles.stageIcon}>
-                    {status === "APPROVED"
-                      ? "✓"
-                      : status === "REJECTED"
-                      ? "×"
-                      : "➜"}
-                  </div>
-
-                  <div>
-
-                    <span style={styles.bannerLabel}>
-                      CURRENT STAGE
-                    </span>
-
-                    <h3 style={styles.bannerTitle}>
-                      {currentStage}
-                    </h3>
-
-                    <p style={styles.bannerText}>
-                      {status === "APPROVED"
-                        ? "Your promotion application has been approved."
-                        : status === "REJECTED"
-                        ? "Your promotion application has been rejected."
-                        : status === "DRAFT"
-                        ? "Your application is still in draft and has not been submitted."
-                        : `Your application is currently being processed at the ${currentStage} stage.`}
-                    </p>
-
-                  </div>
+                  <span className={getStatusClass(status)}>
+                    {status}
+                  </span>
 
                 </div>
 
@@ -1394,7 +847,7 @@ function MyApplications() {
 
                 <div style={styles.summaryGrid}>
 
-                  <div style={styles.summaryCard}>
+                  <div style={styles.summaryItem}>
                     <span style={styles.summaryLabel}>
                       Current Position
                     </span>
@@ -1404,7 +857,7 @@ function MyApplications() {
                     </strong>
                   </div>
 
-                  <div style={styles.summaryCard}>
+                  <div style={styles.summaryItem}>
                     <span style={styles.summaryLabel}>
                       Position Applied For
                     </span>
@@ -1414,9 +867,9 @@ function MyApplications() {
                     </strong>
                   </div>
 
-                  <div style={styles.summaryCard}>
+                  <div style={styles.summaryItem}>
                     <span style={styles.summaryLabel}>
-                      Total Points
+                      Total Score
                     </span>
 
                     <strong style={styles.points}>
@@ -1424,474 +877,302 @@ function MyApplications() {
                     </strong>
                   </div>
 
-                  <div style={styles.summaryCard}>
+                  <div style={styles.summaryItem}>
                     <span style={styles.summaryLabel}>
-                      Application Status
+                      Current Stage
                     </span>
 
-                    <span
-                      className={getStatusClass(
-                        getStatusLabel(status)
-                      )}
-                    >
-                      {getStatusLabel(status)}
-                    </span>
+                    <strong style={styles.currentStage}>
+                      {currentStage}
+                    </strong>
                   </div>
 
                 </div>
 
-                {/* =================================================
-                    PROMOTION PROCESS TRACKING
-                ================================================= */}
+                {/* ==================================================
+                    APPROVAL PROGRESS
+                ================================================== */}
 
-                <div style={styles.trackingSection}>
+                <div style={styles.progressSection}>
 
-                  <div style={styles.sectionHeader}>
+                  <h4 style={styles.progressTitle}>
+                    Promotion Approval Progress
+                  </h4>
 
-                    <div>
-                      <h3 style={styles.sectionTitle}>
-                        Promotion Process Tracking
-                      </h3>
+                  <div style={styles.progressContainer}>
 
-                      <p style={styles.sectionSubtitle}>
-                        Follow the progress of your
-                        application through each
-                        approval stage.
-                      </p>
-                    </div>
+                    {stages.map((stage, index) => {
 
-                    <div style={styles.stageCounter}>
-                      Stage{" "}
-                      {Math.min(
-                        currentIndex + 1,
-                        stages.length
-                      )}{" "}
-                      of {stages.length}
-                    </div>
+                      const stageStatus =
+                        getStageStatus(app, stage.key);
 
-                  </div>
+                      const completed =
+                        index < currentIndex ||
+                        (
+                          index === currentIndex &&
+                          isCompleted(stageStatus)
+                        );
 
-                  <div style={styles.timeline}>
+                      const active =
+                        index === currentIndex;
 
-                    {stages.map(
-                      (stage, index) => {
+                      const rejected =
+                        isRejected(stageStatus);
 
-                        const stageStatus =
-                          getStageStatus(
-                            app,
-                            stage.key
-                          );
+                      return (
 
-                        const rejected =
-                          isRejected(
-                            stageStatus
-                          );
-
-                        let completed =
-                          index <
-                          currentIndex;
-
-                        let active =
-                          index ===
-                            currentIndex &&
-                          !rejected;
-
-                        // Final approved
-                        if (
-                          stage.key === "final" &&
-                          status === "APPROVED"
-                        ) {
-                          completed = true;
-                          active = false;
-                        }
-
-                        // Final rejected
-                        if (
-                          stage.key === "final" &&
-                          status === "REJECTED"
-                        ) {
-                          completed = false;
-                          active = false;
-                        }
-
-                        return (
+                        <div
+                          key={stage.key}
+                          style={styles.progressItem}
+                        >
 
                           <div
-                            key={stage.key}
-                            style={styles.timelineItem}
+                            style={
+                              completed
+                                ? styles.stepCircleCompleted
+                                : rejected
+                                ? styles.stepCircleRejected
+                                : active
+                                ? styles.stepCircleActive
+                                : styles.stepCircle
+                            }
                           >
+                            {completed
+                              ? "✓"
+                              : rejected
+                              ? "×"
+                              : index + 1}
+                          </div>
 
-                            <div style={styles.timelineTop}>
+                          <span
+                            style={
+                              completed
+                                ? styles.stageLabelCompleted
+                                : active
+                                ? styles.stageLabelActive
+                                : styles.stageLabel
+                            }
+                          >
+                            {stage.title}
+                          </span>
 
-                              <div
-                                style={
-                                  rejected
-                                    ? styles.stepRejected
-                                    : completed
-                                    ? styles.stepCompleted
-                                    : active
-                                    ? styles.stepActive
-                                    : styles.stepPending
-                                }
-                              >
-                                {rejected
-                                  ? "×"
-                                  : completed
-                                  ? "✓"
-                                  : index + 1}
-                              </div>
-
-                              {index <
-                                stages.length - 1 && (
-                                <div
-                                  style={
-                                    index <
-                                    currentIndex
-                                      ? styles.lineCompleted
-                                      : styles.linePending
-                                  }
-                                />
-                              )}
-
-                            </div>
-
+                          {index < stages.length - 1 && (
                             <div
                               style={
-                                active
-                                  ? styles.stageActive
-                                  : completed
-                                  ? styles.stageCompleted
-                                  : styles.stagePendingText
+                                index < currentIndex
+                                  ? styles.progressLineCompleted
+                                  : styles.progressLine
                               }
-                            >
-                              {stage.shortTitle}
-                            </div>
+                            />
+                          )}
 
-                            <div style={styles.stageDescription}>
-                              {stage.description}
-                            </div>
+                        </div>
 
-                            <div
-                              className={getStatusClass(
-                                stageStatus
-                              )}
-                              style={{
-                                marginTop: "8px",
-                              }}
-                            >
-                              {stageStatus}
-                            </div>
-
-                          </div>
-                        );
-                      }
-                    )}
+                      );
+                    })}
 
                   </div>
 
                 </div>
 
-                {/* =================================================
-                    APPROVAL STAGE DETAILS
-                ================================================= */}
+                {/* ==================================================
+                    APPROVAL STATUS TABLE
+                ================================================== */}
 
-                <div style={styles.detailsSection}>
+                <div style={styles.statusSection}>
 
-                  <h3 style={styles.sectionTitle}>
+                  <h4 style={styles.statusTitle}>
                     Approval Stage Details
-                  </h3>
+                  </h4>
 
-                  <div style={styles.tableWrapper}>
+                  <div style={styles.statusTableWrapper}>
 
-                    <table style={styles.table}>
+                    <table style={styles.statusTable}>
 
                       <thead>
+
                         <tr>
-
-                          <th style={styles.th}>
-                            #
-                          </th>
-
-                          <th style={styles.th}>
-                            Stage
-                          </th>
-
-                          <th style={styles.th}>
-                            Responsible Officer
-                          </th>
-
-                          <th style={styles.th}>
-                            Status
-                          </th>
-
+                          <th>#</th>
+                          <th>Approval Stage</th>
+                          <th>Status / Recommendation</th>
                         </tr>
+
                       </thead>
 
                       <tbody>
 
-                        {/* 1 SUBMITTED */}
-
                         <tr>
-                          <td style={styles.td}>
-                            1
-                          </td>
+                          <td>1</td>
 
-                          <td style={styles.td}>
+                          <td>
                             <strong>
-                              Application Submitted
+                              Application Submission
                             </strong>
 
-                            <small style={styles.smallText}>
-                              Staff submission
+                            <small>
+                              Staff application
                             </small>
                           </td>
 
-                          <td style={styles.td}>
-                            Applicant
-                          </td>
-
-                          <td style={styles.td}>
+                          <td>
                             <span className="status approved">
                               Submitted
                             </span>
                           </td>
                         </tr>
 
-                        {/* 2 HOD */}
+                        {/* HOD */}
 
                         <tr>
-                          <td style={styles.td}>
-                            2
-                          </td>
+                          <td>2</td>
 
-                          <td style={styles.td}>
+                          <td>
                             <strong>
-                              HOD
+                              Head of Department (HOD)
                             </strong>
 
-                            <small style={styles.smallText}>
+                            <small>
                               Departmental review
                             </small>
                           </td>
 
-                          <td style={styles.td}>
-                            {getHODName(app)}
-                          </td>
-
-                          <td style={styles.td}>
+                          <td>
                             <span
                               className={getStatusClass(
-                                getStageStatus(
-                                  app,
-                                  "hod"
-                                )
+                                getHODStatus(app)
                               )}
                             >
-                              {getStageStatus(
-                                app,
-                                "hod"
-                              )}
+                              {getHODStatus(app)}
                             </span>
                           </td>
                         </tr>
 
-                        {/* 3 DEAN */}
+                        {/* DEAN */}
 
                         <tr>
-                          <td style={styles.td}>
-                            3
-                          </td>
+                          <td>3</td>
 
-                          <td style={styles.td}>
+                          <td>
                             <strong>
-                              Dean
+                              Dean Review
                             </strong>
 
-                            <small style={styles.smallText}>
+                            <small>
                               College / Faculty review
                             </small>
                           </td>
 
-                          <td style={styles.td}>
-                            {getDeanName(app)}
-                          </td>
-
-                          <td style={styles.td}>
+                          <td>
                             <span
                               className={getStatusClass(
-                                getStageStatus(
-                                  app,
-                                  "dean"
-                                )
+                                getDeanStatus(app)
                               )}
                             >
-                              {getStageStatus(
-                                app,
-                                "dean"
-                              )}
+                              {getDeanStatus(app)}
                             </span>
                           </td>
                         </tr>
 
-                        {/* 4 REVIEWER */}
+                        {/* REVIEWER */}
 
                         <tr>
-                          <td style={styles.td}>
-                            4
-                          </td>
+                          <td>4</td>
 
-                          <td style={styles.td}>
+                          <td>
                             <strong>
-                              Reviewer
+                              Academic Reviewer
                             </strong>
 
-                            <small style={styles.smallText}>
-                              Academic assessment
+                            <small>
+                              Independent academic assessment
                             </small>
                           </td>
 
-                          <td style={styles.td}>
-                            {getReviewerName(app)}
-                          </td>
-
-                          <td style={styles.td}>
+                          <td>
                             <span
                               className={getStatusClass(
-                                getStageStatus(
-                                  app,
-                                  "reviewer"
-                                )
+                                getReviewerStatus(app)
                               )}
                             >
-                              {getStageStatus(
-                                app,
-                                "reviewer"
-                              )}
+                              {getReviewerStatus(app)}
                             </span>
                           </td>
                         </tr>
 
-                        {/* 5 STUDENT */}
+                        {/* STUDENT */}
 
-                        <tr
-                          style={
-                            [
-                              "STUDENT_REVIEW",
-                              "STUDENT_ACTION",
-                              "STUDENT_ACKNOWLEDGEMENT",
-                            ].includes(status)
-                              ? styles.studentActiveRow
-                              : {}
-                          }
-                        >
-                          <td style={styles.td}>
-                            5
-                          </td>
+                        <tr>
+                          <td>5</td>
 
-                          <td style={styles.td}>
+                          <td>
                             <strong>
-                              Student
+                              Student Evaluation
                             </strong>
 
-                            <small style={styles.smallText}>
-                              Applicant receives /
-                              acknowledges reviewer assessment
+                            <small>
+                              Student confidential teaching evaluation
                             </small>
                           </td>
 
-                          <td style={styles.td}>
-                            Applicant
-                          </td>
-
-                          <td style={styles.td}>
+                          <td>
                             <span
                               className={getStatusClass(
-                                getStageStatus(
-                                  app,
-                                  "student"
-                                )
+                                getStudentStatus(app)
                               )}
                             >
-                              {getStageStatus(
-                                app,
-                                "student"
-                              )}
+                              {getStudentStatus(app)}
                             </span>
                           </td>
                         </tr>
 
-                        {/* 6 COMMITTEE */}
+                        {/* COMMITTEE */}
 
                         <tr>
-                          <td style={styles.td}>
-                            6
-                          </td>
+                          <td>6</td>
 
-                          <td style={styles.td}>
+                          <td>
                             <strong>
                               Promotion Committee
                             </strong>
 
-                            <small style={styles.smallText}>
-                              Committee consideration
+                            <small>
+                              Committee recommendation
                             </small>
                           </td>
 
-                          <td style={styles.td}>
-                            Promotion Committee
-                          </td>
-
-                          <td style={styles.td}>
+                          <td>
                             <span
                               className={getStatusClass(
-                                getStageStatus(
-                                  app,
-                                  "committee"
-                                )
+                                getCommitteeStatus(app)
                               )}
                             >
-                              {getStageStatus(
-                                app,
-                                "committee"
-                              )}
+                              {getCommitteeStatus(app)}
                             </span>
                           </td>
                         </tr>
 
-                        {/* 7 FINAL */}
+                        {/* FINAL */}
 
                         <tr style={styles.finalRow}>
-                          <td style={styles.td}>
-                            7
-                          </td>
+                          <td>7</td>
 
-                          <td style={styles.td}>
+                          <td>
                             <strong>
                               Final Decision
                             </strong>
 
-                            <small style={styles.smallText}>
+                            <small>
                               Final promotion decision
                             </small>
                           </td>
 
-                          <td style={styles.td}>
-                            University Authority
-                          </td>
-
-                          <td style={styles.td}>
+                          <td>
                             <span
                               className={getStatusClass(
-                                getStageStatus(
-                                  app,
-                                  "final"
-                                )
+                                getFinalStatus(app)
                               )}
                             >
-                              {getStageStatus(
-                                app,
-                                "final"
-                              )}
+                              {getFinalStatus(app)}
                             </span>
                           </td>
                         </tr>
@@ -1901,198 +1182,46 @@ function MyApplications() {
                     </table>
 
                   </div>
+
                 </div>
 
-                {/* =================================================
-                    APPLICATION INFORMATION
-                ================================================= */}
-
-                <div style={styles.infoSection}>
-
-                  <h3 style={styles.sectionTitle}>
-                    Application Information
-                  </h3>
-
-                  <div style={styles.infoGrid}>
-
-                    <div>
-                      <span style={styles.infoLabel}>
-                        Applicant Name
-                      </span>
-
-                      <strong>
-                        {getApplicantName(app)}
-                      </strong>
-                    </div>
-
-                    <div>
-                      <span style={styles.infoLabel}>
-                        Employment Status
-                      </span>
-
-                      <strong>
-                        {app?.employment_status ||
-                          "N/A"}
-                      </strong>
-                    </div>
-
-                    <div>
-                      <span style={styles.infoLabel}>
-                        Date of Appointment
-                      </span>
-
-                      <strong>
-                        {formatDate(
-                          app?.date_of_appointment_at_suza
-                        )}
-                      </strong>
-                    </div>
-
-                    <div>
-                      <span style={styles.infoLabel}>
-                        Date of Current Position
-                      </span>
-
-                      <strong>
-                        {formatDate(
-                          app?.date_of_current_position
-                        )}
-                      </strong>
-                    </div>
-
-                    <div>
-                      <span style={styles.infoLabel}>
-                        Applied Same Rank Before
-                      </span>
-
-                      <strong>
-                        {app?.applied_same_rank_before ||
-                          "N/A"}
-                      </strong>
-                    </div>
-
-                    <div>
-                      <span style={styles.infoLabel}>
-                        Intends New Publications
-                      </span>
-
-                      <strong>
-                        {app?.intends_new_publications ||
-                          "N/A"}
-                      </strong>
-                    </div>
-
-                  </div>
-                </div>
-
-                {/* =================================================
-                    DOCUMENTS
-                ================================================= */}
-
-                <div style={styles.documentsSection}>
-
-                  <h3 style={styles.sectionTitle}>
-                    Application Documents
-                  </h3>
-
-                  <div style={styles.documentGrid}>
-
-                    <div style={styles.documentCard}>
-
-                      <div style={styles.documentIcon}>
-                        📄
-                      </div>
-
-                      <div>
-                        <strong>
-                          Curriculum Vitae
-                        </strong>
-
-                        <p style={styles.documentText}>
-                          Submitted CV
-                        </p>
-                      </div>
-
-                      {cv ? (
-                        <a
-                          href={getDocumentUrl(cv)}
-                          target="_blank"
-                          rel="noreferrer"
-                          style={styles.documentButton}
-                        >
-                          View PDF
-                        </a>
-                      ) : (
-                        <span style={styles.noDocument}>
-                          Not uploaded
-                        </span>
-                      )}
-
-                    </div>
-
-                    <div style={styles.documentCard}>
-
-                      <div style={styles.documentIcon}>
-                        📎
-                      </div>
-
-                      <div>
-                        <strong>
-                          Additional Documents
-                        </strong>
-
-                        <p style={styles.documentText}>
-                          Supporting documents
-                        </p>
-                      </div>
-
-                      {additional ? (
-                        <a
-                          href={getDocumentUrl(additional)}
-                          target="_blank"
-                          rel="noreferrer"
-                          style={styles.documentButton}
-                        >
-                          View PDF
-                        </a>
-                      ) : (
-                        <span style={styles.noDocument}>
-                          Not uploaded
-                        </span>
-                      )}
-
-                    </div>
-
-                  </div>
-                </div>
-
-                {/* =================================================
-                    CHECKLIST BUTTON
-                ================================================= */}
+                {/* ==================================================
+                    ACTIONS
+                ================================================== */}
 
                 <div style={styles.actions}>
 
                   <button
-                    onClick={() =>
-                      viewChecklist(app)
-                    }
-                    style={styles.primaryButton}
+                    onClick={() => viewChecklist(app)}
+                    style={styles.checklistButton}
                   >
                     📋 View Promotion Checklist
                   </button>
 
+                  {app.cv && (
+                    <a
+                      href={getDocumentUrl(app.cv)}
+                      target="_blank"
+                      rel="noreferrer"
+                      style={styles.documentButton}
+                    >
+                      📄 View CV
+                    </a>
+                  )}
+
                 </div>
 
               </div>
+
             );
           })}
 
         </div>
       )}
 
-      {/* ==========================================================
+      {/* ======================================================
           CHECKLIST MODAL
-      ========================================================== */}
+      ====================================================== */}
 
       {selectedApplication && (
 
@@ -2104,26 +1233,14 @@ function MyApplications() {
 
               <div>
 
-                <span style={styles.label}>
-                  PROMOTION CHECKLIST
-                </span>
-
                 <h2 style={styles.modalTitle}>
-                  Promotion Materials
+                  Promotion Checklist
                 </h2>
 
                 <p style={styles.modalSubtitle}>
-                  {getCurrentPosition(
-                    selectedApplication
-                  )}
-
-                  <span style={styles.arrow}>
-                    →
-                  </span>
-
-                  {getTargetPosition(
-                    selectedApplication
-                  )}
+                  {getCurrentPosition(selectedApplication)}
+                  {" → "}
+                  {getTargetPosition(selectedApplication)}
                 </p>
 
               </div>
@@ -2143,12 +1260,8 @@ function MyApplications() {
 
                 <div style={styles.spinner}></div>
 
-                <h3>
-                  Loading Checklist
-                </h3>
-
                 <p>
-                  Retrieving your promotion materials...
+                  Loading promotion checklist...
                 </p>
 
               </div>
@@ -2157,197 +1270,159 @@ function MyApplications() {
 
               <div style={styles.noMaterials}>
 
-                <div style={styles.emptyIcon}>
-                  📋
-                </div>
-
-                <h3>
-                  No Promotion Materials Found
-                </h3>
-
                 <p>
-                  No promotion materials have been
-                  registered for this application yet.
+                  No promotion materials were found
+                  for this submission.
                 </p>
 
               </div>
 
             ) : (
 
-              <div style={styles.modalContent}>
+              <div style={styles.modalTableWrapper}>
 
-                <div style={styles.materialSummary}>
+                <table style={styles.checklistTable}>
 
-                  <div>
-                    <span style={styles.summaryLabel}>
-                      Materials
-                    </span>
+                  <thead>
 
-                    <strong>
-                      {materials.length}
-                    </strong>
-                  </div>
+                    <tr>
 
-                  <div>
-                    <span style={styles.summaryLabel}>
-                      Total Points
-                    </span>
+                      <th>S/No</th>
 
-                    <strong style={styles.points}>
-                      {materialTotal}
-                    </strong>
-                  </div>
+                      <th>Promotion Material</th>
 
-                </div>
+                      <th>Score / Points</th>
 
-                <div style={styles.tableWrapper}>
+                      <th>Supporting Document</th>
 
-                  <table style={styles.table}>
+                      <th>Review Status</th>
 
-                    <thead>
+                    </tr>
 
-                      <tr>
+                  </thead>
 
-                        <th style={styles.th}>
-                          #
-                        </th>
+                  <tbody>
 
-                        <th style={styles.th}>
-                          Promotion Material
-                        </th>
+                    {materials.map((material, index) => (
 
-                        <th style={styles.th}>
-                          Points
-                        </th>
+                      <tr
+                        key={
+                          material.id ||
+                          index
+                        }
+                      >
 
-                        <th style={styles.th}>
-                          Supporting Evidence
-                        </th>
+                        <td>
+                          {index + 1}
+                        </td>
 
-                      </tr>
+                        <td>
+                          {material.material_type_display ||
+                            material.material_type ||
+                            material.title ||
+                            "Promotion Material"}
+                        </td>
 
-                    </thead>
+                        <td>
+                          <strong>
+                            {material.points ?? "0"}
+                          </strong>
+                        </td>
 
-                    <tbody>
+                        <td>
 
-                      {materials.map(
-                        (material, index) => {
+                          {material.document ? (
 
-                          return (
+                            <a
+                              href={getDocumentUrl(
+                                material.document
+                              )}
+                              target="_blank"
+                              rel="noreferrer"
+                              style={styles.viewDocument}
+                            >
+                              📄 View PDF
+                            </a>
 
-                            <tr
-                              key={
-                                material?.id ||
-                                index
+                          ) : (
+
+                            <span
+                              style={
+                                styles.noDocument
                               }
                             >
+                              No document
+                            </span>
 
-                              <td style={styles.td}>
-                                {index + 1}
-                              </td>
+                          )}
 
-                              <td style={styles.td}>
-
-                                <strong>
-                                  {getMaterialName(
-                                    material
-                                  )}
-                                </strong>
-
-                              </td>
-
-                              <td style={styles.td}>
-
-                                <strong
-                                  style={
-                                    styles.points
-                                  }
-                                >
-                                  {Number(
-                                    material?.points ||
-                                      0
-                                  ).toFixed(2)}
-                                </strong>
-
-                              </td>
-
-                              <td style={styles.td}>
-
-                                {material?.document ? (
-
-                                  <a
-                                    href={getDocumentUrl(
-                                      material.document
-                                    )}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    style={
-                                      styles.documentButton
-                                    }
-                                  >
-                                    📄 View PDF
-                                  </a>
-
-                                ) : (
-
-                                  <span
-                                    style={
-                                      styles.noDocument
-                                    }
-                                  >
-                                    No document
-                                  </span>
-
-                                )}
-
-                              </td>
-
-                            </tr>
-
-                          );
-                        }
-                      )}
-
-                    </tbody>
-
-                    <tfoot>
-
-                      <tr>
-
-                        <td
-                          colSpan="2"
-                          style={styles.totalLabel}
-                        >
-                          TOTAL SCORE
                         </td>
 
-                        <td
-                          style={styles.totalValue}
-                        >
-                          {materialTotal}
-                        </td>
+                        <td>
 
-                        <td
-                          style={styles.totalBlank}
-                        ></td>
+                          <span
+                            className={getStatusClass(
+                              material.status ||
+                              material.review_status ||
+                              "Submitted"
+                            )}
+                          >
+                            {material.status ||
+                              material.review_status ||
+                              "Submitted"}
+                          </span>
+
+                        </td>
 
                       </tr>
 
-                    </tfoot>
+                    ))}
 
-                  </table>
+                  </tbody>
 
-                </div>
+                  <tfoot>
+
+                    <tr>
+
+                      <td
+                        colSpan="2"
+                        style={styles.totalLabel}
+                      >
+                        TOTAL SCORE
+                      </td>
+
+                      <td style={styles.totalValue}>
+
+                        {materials
+                          .reduce(
+                            (total, item) =>
+                              total +
+                              Number(
+                                item.points || 0
+                              ),
+                            0
+                          )
+                          .toFixed(2)}
+
+                      </td>
+
+                      <td colSpan="2"></td>
+
+                    </tr>
+
+                  </tfoot>
+
+                </table>
 
               </div>
+
             )}
 
             <div style={styles.modalFooter}>
 
               <p style={styles.footerText}>
-                Promotion materials and their
-                points contribute to the academic
-                promotion assessment.
+                Your promotion application is progressing
+                through the responsible approval stages.
               </p>
 
               <button
@@ -2362,98 +1437,13 @@ function MyApplications() {
           </div>
 
         </div>
+
       )}
-
-      {/* ==========================================================
-          CSS
-      ========================================================== */}
-
-      <style>{`
-
-        * {
-          box-sizing: border-box;
-        }
-
-        .status {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          padding: 6px 12px;
-          border-radius: 999px;
-          font-size: 12px;
-          font-weight: 700;
-          white-space: nowrap;
-        }
-
-        .status.approved {
-          background: #dcfce7;
-          color: #166534;
-          border: 1px solid #86efac;
-        }
-
-        .status.review {
-          background: #dbeafe;
-          color: #1d4ed8;
-          border: 1px solid #93c5fd;
-        }
-
-        .status.pending {
-          background: #f3f4f6;
-          color: #4b5563;
-          border: 1px solid #d1d5db;
-        }
-
-        .status.rejected {
-          background: #fee2e2;
-          color: #b91c1c;
-          border: 1px solid #fca5a5;
-        }
-
-        table tbody tr:hover {
-          background: #f8fafc;
-        }
-
-        button {
-          font-family: inherit;
-        }
-
-        @keyframes spin {
-          from {
-            transform: rotate(0deg);
-          }
-
-          to {
-            transform: rotate(360deg);
-          }
-        }
-
-        @media (max-width: 1000px) {
-          .timeline {
-            overflow-x: auto !important;
-            padding-bottom: 15px !important;
-          }
-
-          .timeline > div {
-            min-width: 170px !important;
-          }
-        }
-
-        @media (max-width: 700px) {
-          table {
-            min-width: 750px;
-          }
-
-          .status {
-            font-size: 11px;
-            padding: 5px 9px;
-          }
-        }
-
-      `}</style>
 
     </div>
   );
 }
+
 
 // ============================================================
 // STYLES
@@ -2462,39 +1452,31 @@ function MyApplications() {
 const styles = {
 
   page: {
-    maxWidth: "1350px",
-    margin: "0 auto",
-    padding: "30px 22px 70px",
-    fontFamily:
-      "Inter, Arial, Helvetica, sans-serif",
+    maxWidth: "1250px",
+    margin: "30px auto",
+    padding: "0 20px 60px",
+    fontFamily: "Arial, Helvetica, sans-serif",
     color: "#111827",
   },
 
   header: {
     display: "flex",
     justifyContent: "space-between",
-    alignItems: "flex-start",
+    alignItems: "center",
     gap: "20px",
     marginBottom: "25px",
   },
 
-  breadcrumb: {
-    fontSize: "12px",
-    color: "#64748b",
-    marginBottom: "8px",
-  },
-
   title: {
     margin: 0,
-    fontSize: "30px",
-    fontWeight: "800",
-    color: "#1e3a8a",
+    color: "#1e40af",
+    fontSize: "28px",
+    fontWeight: "700",
   },
 
   subtitle: {
-    maxWidth: "900px",
-    margin: "8px 0 0",
-    color: "#64748b",
+    marginTop: "8px",
+    color: "#6b7280",
     lineHeight: "1.6",
   },
 
@@ -2502,106 +1484,83 @@ const styles = {
     border: "1px solid #2563eb",
     background: "#fff",
     color: "#2563eb",
-    padding: "11px 18px",
-    borderRadius: "8px",
+    padding: "10px 18px",
+    borderRadius: "7px",
     cursor: "pointer",
-    fontWeight: "700",
-  },
-
-  errorBox: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    gap: "20px",
-    background: "#fef2f2",
-    border: "1px solid #fecaca",
-    color: "#991b1b",
-    padding: "16px 18px",
-    borderRadius: "10px",
-    marginBottom: "22px",
-  },
-
-  errorText: {
-    margin: "5px 0 0",
-  },
-
-  errorClose: {
-    border: "none",
-    background: "transparent",
-    color: "#991b1b",
-    fontSize: "24px",
-    cursor: "pointer",
+    fontWeight: "600",
+    whiteSpace: "nowrap",
   },
 
   staffCard: {
-    display: "flex",
-    alignItems: "center",
-    gap: "18px",
-    background:
-      "linear-gradient(135deg, #eff6ff, #f8fafc)",
+    display: "grid",
+    gridTemplateColumns: "2fr 2fr 1fr",
+    gap: "20px",
+    background: "#eff6ff",
     border: "1px solid #bfdbfe",
-    borderRadius: "14px",
-    padding: "22px",
+    borderRadius: "10px",
+    padding: "20px",
     marginBottom: "25px",
   },
 
-  staffAvatar: {
-    width: "55px",
-    height: "55px",
-    borderRadius: "50%",
-    background: "#2563eb",
-    color: "#fff",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontSize: "22px",
-    fontWeight: "800",
-  },
-
-  staffMain: {
-    flex: 1,
-  },
-
-  label: {
+  smallLabel: {
     display: "block",
-    fontSize: "10px",
-    letterSpacing: "0.7px",
-    fontWeight: "800",
-    color: "#64748b",
+    fontSize: "11px",
+    color: "#6b7280",
+    fontWeight: "700",
     marginBottom: "5px",
   },
 
   staffName: {
     margin: 0,
     color: "#1e3a8a",
+  },
+
+  staffValue: {
+    margin: 0,
+    color: "#374151",
+  },
+
+  error: {
+    position: "relative",
+    padding: "14px 45px 14px 15px",
+    background: "#fee2e2",
+    color: "#991b1b",
+    borderRadius: "8px",
+    marginBottom: "20px",
+  },
+
+  closeError: {
+    position: "absolute",
+    right: "12px",
+    top: "8px",
+    border: "none",
+    background: "transparent",
     fontSize: "20px",
+    cursor: "pointer",
+    color: "#991b1b",
   },
 
-  staffEmail: {
-    margin: "4px 0 0",
-    color: "#64748b",
-    fontSize: "13px",
+  loadingBox: {
+    textAlign: "center",
+    padding: "80px 20px",
   },
 
-  staffInfo: {
-    minWidth: "130px",
-    paddingLeft: "20px",
-    borderLeft: "1px solid #dbeafe",
-    display: "flex",
-    flexDirection: "column",
+  spinner: {
+    width: "30px",
+    height: "30px",
+    border: "4px solid #e5e7eb",
+    borderTop: "4px solid #2563eb",
+    borderRadius: "50%",
+    margin: "0 auto 15px",
+    animation: "spin 1s linear infinite",
   },
 
-  applicationCount: {
-    color: "#2563eb",
-    fontSize: "20px",
-  },
-
-  emptyCard: {
+  emptyBox: {
+    textAlign: "center",
+    padding: "70px 20px",
     background: "#fff",
     border: "1px solid #e5e7eb",
-    borderRadius: "14px",
-    textAlign: "center",
-    padding: "75px 25px",
+    borderRadius: "12px",
   },
 
   emptyIcon: {
@@ -2609,13 +1568,7 @@ const styles = {
     marginBottom: "15px",
   },
 
-  emptyHint: {
-    color: "#94a3b8",
-    fontSize: "13px",
-    marginBottom: "22px",
-  },
-
-  applicationList: {
+  cards: {
     display: "flex",
     flexDirection: "column",
     gap: "25px",
@@ -2623,463 +1576,253 @@ const styles = {
 
   applicationCard: {
     background: "#fff",
-    border: "1px solid #e2e8f0",
-    borderRadius: "15px",
-    boxShadow:
-      "0 5px 20px rgba(15, 23, 42, 0.06)",
-    overflow: "hidden",
+    border: "1px solid #e5e7eb",
+    borderRadius: "12px",
+    padding: "25px",
+    boxShadow: "0 4px 15px rgba(0,0,0,0.05)",
   },
 
   cardHeader: {
-    padding: "25px",
     display: "flex",
     justifyContent: "space-between",
     alignItems: "flex-start",
     gap: "20px",
-    borderBottom: "1px solid #e5e7eb",
+    marginBottom: "25px",
   },
 
-  applicationId: {
-    fontSize: "11px",
-    fontWeight: "800",
-    color: "#64748b",
-    letterSpacing: "0.5px",
+  applicationNumber: {
+    fontSize: "12px",
+    color: "#6b7280",
+    fontWeight: "700",
   },
 
   positionTitle: {
-    margin: "7px 0 0",
-    fontSize: "22px",
-    color: "#0f172a",
+    margin: "8px 0 0",
+    color: "#111827",
   },
 
-  arrow: {
-    margin: "0 9px",
-    color: "#2563eb",
-    fontWeight: "800",
-  },
-
-  dateText: {
-    margin: "7px 0 0",
-    color: "#64748b",
+  submittedDate: {
+    color: "#6b7280",
     fontSize: "13px",
+    marginTop: "8px",
   },
 
-  currentBanner: {
-    margin: "22px 25px",
-    padding: "18px",
-    borderRadius: "12px",
-    background: "#eff6ff",
-    border: "1px solid #bfdbfe",
-    display: "flex",
+  summaryGrid: {
+    display: "grid",
+    gridTemplateColumns:
+      "repeat(auto-fit, minmax(200px, 1fr))",
     gap: "15px",
-    alignItems: "flex-start",
+    marginBottom: "25px",
   },
 
-  approvedBanner: {
-    margin: "22px 25px",
-    padding: "18px",
-    borderRadius: "12px",
-    background: "#f0fdf4",
-    border: "1px solid #bbf7d0",
+  summaryItem: {
+    padding: "15px",
+    background: "#f9fafb",
+    borderRadius: "8px",
+    border: "1px solid #e5e7eb",
+  },
+
+  summaryLabel: {
+    display: "block",
+    fontSize: "12px",
+    color: "#6b7280",
+    marginBottom: "6px",
+  },
+
+  points: {
+    color: "#2563eb",
+    fontSize: "20px",
+  },
+
+  currentStage: {
+    color: "#1d4ed8",
+  },
+
+  progressSection: {
+    marginTop: "20px",
+    padding: "25px 20px",
+    background: "#f9fafb",
+    borderRadius: "10px",
+    border: "1px solid #e5e7eb",
+  },
+
+  progressTitle: {
+    marginTop: 0,
+    marginBottom: "30px",
+    color: "#1f2937",
+  },
+
+  progressContainer: {
     display: "flex",
-    gap: "15px",
     alignItems: "flex-start",
+    width: "100%",
+    overflowX: "auto",
+    paddingBottom: "10px",
   },
 
-  rejectedBanner: {
-    margin: "22px 25px",
-    padding: "18px",
-    borderRadius: "12px",
-    background: "#fef2f2",
-    border: "1px solid #fecaca",
+  progressItem: {
     display: "flex",
-    gap: "15px",
-    alignItems: "flex-start",
+    alignItems: "center",
+    minWidth: "120px",
+    flex: 1,
   },
 
-  stageIcon: {
-    width: "38px",
-    height: "38px",
+  stepCircle: {
+    width: "34px",
+    height: "34px",
+    minWidth: "34px",
+    borderRadius: "50%",
+    background: "#e5e7eb",
+    color: "#6b7280",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontWeight: "bold",
+    border: "2px solid #d1d5db",
+  },
+
+  stepCircleActive: {
+    width: "34px",
+    height: "34px",
+    minWidth: "34px",
     borderRadius: "50%",
     background: "#2563eb",
     color: "#fff",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    fontWeight: "800",
-    flexShrink: 0,
+    fontWeight: "bold",
+    border: "2px solid #1d4ed8",
   },
 
-  bannerLabel: {
-    fontSize: "10px",
-    fontWeight: "800",
-    color: "#64748b",
-  },
-
-  bannerTitle: {
-    margin: "3px 0",
-    color: "#1e3a8a",
-  },
-
-  bannerText: {
-    margin: 0,
-    color: "#475569",
-    fontSize: "13px",
-  },
-
-  summaryGrid: {
-    display: "grid",
-    gridTemplateColumns:
-      "repeat(auto-fit, minmax(210px, 1fr))",
-    gap: "14px",
-    padding: "0 25px 25px",
-  },
-
-  summaryCard: {
-    background: "#f8fafc",
-    border: "1px solid #e2e8f0",
-    borderRadius: "10px",
-    padding: "16px",
-    minHeight: "82px",
-    display: "flex",
-    flexDirection: "column",
-    justifyContent: "center",
-    gap: "5px",
-  },
-
-  summaryLabel: {
-    color: "#64748b",
-    fontSize: "11px",
-    fontWeight: "700",
-  },
-
-  points: {
-    color: "#2563eb",
-    fontSize: "19px",
-  },
-
-  trackingSection: {
-    margin: "0 25px 25px",
-    padding: "24px",
-    background: "#f8fafc",
-    border: "1px solid #e2e8f0",
-    borderRadius: "12px",
-  },
-
-  sectionHeader: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    gap: "15px",
-    marginBottom: "30px",
-  },
-
-  sectionTitle: {
-    margin: 0,
-    color: "#1e293b",
-    fontSize: "18px",
-  },
-
-  sectionSubtitle: {
-    margin: "5px 0 0",
-    color: "#64748b",
-    fontSize: "13px",
-  },
-
-  stageCounter: {
-    background: "#dbeafe",
-    color: "#1d4ed8",
-    padding: "7px 12px",
-    borderRadius: "20px",
-    fontSize: "12px",
-    fontWeight: "700",
-    whiteSpace: "nowrap",
-  },
-
-  timeline: {
-    display: "flex",
-    alignItems: "flex-start",
-    width: "100%",
-    overflowX: "auto",
-  },
-
-  timelineItem: {
-    flex: 1,
-    minWidth: "145px",
-    textAlign: "center",
-  },
-
-  timelineTop: {
-    display: "flex",
-    alignItems: "center",
-  },
-
-  stepCompleted: {
-    width: "38px",
-    height: "38px",
-    minWidth: "38px",
+  stepCircleCompleted: {
+    width: "34px",
+    height: "34px",
+    minWidth: "34px",
     borderRadius: "50%",
     background: "#16a34a",
     color: "#fff",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    fontWeight: "800",
-    border: "3px solid #bbf7d0",
-    zIndex: 2,
+    fontWeight: "bold",
+    border: "2px solid #15803d",
   },
 
-  stepActive: {
-    width: "38px",
-    height: "38px",
-    minWidth: "38px",
-    borderRadius: "50%",
-    background: "#2563eb",
-    color: "#fff",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontWeight: "800",
-    border: "3px solid #bfdbfe",
-    zIndex: 2,
-  },
-
-  stepPending: {
-    width: "38px",
-    height: "38px",
-    minWidth: "38px",
-    borderRadius: "50%",
-    background: "#e2e8f0",
-    color: "#64748b",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontWeight: "800",
-    border: "3px solid #f1f5f9",
-    zIndex: 2,
-  },
-
-  stepRejected: {
-    width: "38px",
-    height: "38px",
-    minWidth: "38px",
+  stepCircleRejected: {
+    width: "34px",
+    height: "34px",
+    minWidth: "34px",
     borderRadius: "50%",
     background: "#dc2626",
     color: "#fff",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    fontWeight: "800",
-    border: "3px solid #fecaca",
-    zIndex: 2,
+    fontWeight: "bold",
+    border: "2px solid #b91c1c",
   },
 
-  lineCompleted: {
-    height: "4px",
+  stageLabel: {
+    fontSize: "11px",
+    color: "#9ca3af",
+    textAlign: "center",
+    marginLeft: "6px",
+    whiteSpace: "nowrap",
+  },
+
+  stageLabelActive: {
+    fontSize: "11px",
+    color: "#2563eb",
+    fontWeight: "700",
+    textAlign: "center",
+    marginLeft: "6px",
+    whiteSpace: "nowrap",
+  },
+
+  stageLabelCompleted: {
+    fontSize: "11px",
+    color: "#15803d",
+    fontWeight: "700",
+    textAlign: "center",
+    marginLeft: "6px",
+    whiteSpace: "nowrap",
+  },
+
+  progressLine: {
+    height: "3px",
+    background: "#d1d5db",
+    flex: 1,
+    margin: "0 8px",
+  },
+
+  progressLineCompleted: {
+    height: "3px",
     background: "#16a34a",
     flex: 1,
+    margin: "0 8px",
   },
 
-  linePending: {
-    height: "4px",
-    background: "#cbd5e1",
-    flex: 1,
+  statusSection: {
+    marginTop: "25px",
   },
 
-  stageActive: {
-    marginTop: "10px",
-    fontSize: "13px",
-    color: "#2563eb",
-    fontWeight: "800",
+  statusTitle: {
+    marginBottom: "15px",
+    color: "#1f2937",
   },
 
-  stageCompleted: {
-    marginTop: "10px",
-    fontSize: "13px",
-    color: "#15803d",
-    fontWeight: "800",
-  },
-
-  stagePendingText: {
-    marginTop: "10px",
-    fontSize: "13px",
-    color: "#64748b",
-    fontWeight: "700",
-  },
-
-  stageDescription: {
-    marginTop: "5px",
-    color: "#94a3b8",
-    fontSize: "10px",
-    lineHeight: "1.4",
-    minHeight: "30px",
-    padding: "0 8px",
-  },
-
-  detailsSection: {
-    padding: "0 25px 25px",
-  },
-
-  tableWrapper: {
+  statusTableWrapper: {
     overflowX: "auto",
-    border: "1px solid #e2e8f0",
-    borderRadius: "10px",
-    marginTop: "15px",
+    border: "1px solid #e5e7eb",
+    borderRadius: "8px",
   },
 
-  table: {
+  statusTable: {
     width: "100%",
     borderCollapse: "collapse",
-    minWidth: "750px",
-  },
-
-  th: {
-    padding: "13px 14px",
-    textAlign: "left",
-    background: "#f8fafc",
-    color: "#475569",
-    fontSize: "12px",
-    fontWeight: "800",
-    borderBottom: "1px solid #e2e8f0",
-  },
-
-  td: {
-    padding: "14px",
-    borderBottom: "1px solid #e2e8f0",
-    fontSize: "13px",
-    verticalAlign: "middle",
-  },
-
-  smallText: {
-    display: "block",
-    color: "#94a3b8",
-    fontSize: "11px",
-    marginTop: "4px",
-  },
-
-  studentActiveRow: {
-    background: "#eff6ff",
   },
 
   finalRow: {
     background: "#f8fafc",
-  },
-
-  infoSection: {
-    borderTop: "1px solid #e5e7eb",
-    padding: "25px",
-  },
-
-  infoGrid: {
-    display: "grid",
-    gridTemplateColumns:
-      "repeat(auto-fit, minmax(210px, 1fr))",
-    gap: "18px",
-    marginTop: "18px",
-  },
-
-  infoLabel: {
-    display: "block",
-    fontSize: "11px",
-    color: "#64748b",
-    marginBottom: "5px",
-    fontWeight: "700",
-  },
-
-  documentsSection: {
-    borderTop: "1px solid #e5e7eb",
-    padding: "25px",
-  },
-
-  documentGrid: {
-    display: "grid",
-    gridTemplateColumns:
-      "repeat(auto-fit, minmax(300px, 1fr))",
-    gap: "15px",
-    marginTop: "18px",
-  },
-
-  documentCard: {
-    display: "flex",
-    alignItems: "center",
-    gap: "12px",
-    padding: "15px",
-    border: "1px solid #e2e8f0",
-    borderRadius: "10px",
-    background: "#f8fafc",
-  },
-
-  documentIcon: {
-    fontSize: "25px",
-  },
-
-  documentText: {
-    margin: "3px 0 0",
-    color: "#64748b",
-    fontSize: "12px",
-  },
-
-  documentButton: {
-    marginLeft: "auto",
-    textDecoration: "none",
-    background: "#eff6ff",
-    color: "#2563eb",
-    border: "1px solid #bfdbfe",
-    padding: "8px 12px",
-    borderRadius: "7px",
-    fontSize: "12px",
-    fontWeight: "700",
-    whiteSpace: "nowrap",
-  },
-
-  noDocument: {
-    marginLeft: "auto",
-    color: "#94a3b8",
-    fontSize: "12px",
+    fontWeight: "600",
   },
 
   actions: {
-    padding: "0 25px 25px",
     display: "flex",
-    gap: "10px",
+    gap: "12px",
+    marginTop: "25px",
     flexWrap: "wrap",
   },
 
-  primaryButton: {
+  checklistButton: {
     border: "none",
     background: "#2563eb",
     color: "#fff",
-    padding: "11px 17px",
-    borderRadius: "8px",
+    padding: "12px 18px",
+    borderRadius: "7px",
     cursor: "pointer",
-    fontWeight: "700",
+    fontWeight: "600",
   },
 
-  loadingBox: {
-    textAlign: "center",
-    padding: "100px 20px",
-  },
-
-  spinner: {
-    width: "35px",
-    height: "35px",
-    border: "4px solid #e2e8f0",
-    borderTop: "4px solid #2563eb",
-    borderRadius: "50%",
-    margin: "0 auto 18px",
-    animation:
-      "spin 1s linear infinite",
+  documentButton: {
+    textDecoration: "none",
+    background: "#f3f4f6",
+    color: "#374151",
+    padding: "12px 18px",
+    borderRadius: "7px",
+    fontWeight: "600",
   },
 
   modalOverlay: {
     position: "fixed",
     inset: 0,
-    background: "rgba(15, 23, 42, 0.65)",
+    background: "rgba(0,0,0,0.55)",
     display: "flex",
-    alignItems: "center",
     justifyContent: "center",
+    alignItems: "center",
+    zIndex: 1000,
     padding: "20px",
-    zIndex: 9999,
   },
 
   modal: {
@@ -3088,107 +1831,109 @@ const styles = {
     maxHeight: "90vh",
     overflowY: "auto",
     background: "#fff",
-    borderRadius: "14px",
-    boxShadow:
-      "0 25px 70px rgba(0,0,0,0.3)",
+    borderRadius: "12px",
+    boxShadow: "0 15px 50px rgba(0,0,0,0.25)",
   },
 
   modalHeader: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    padding: "23px 25px",
+    padding: "22px 25px",
     borderBottom: "1px solid #e5e7eb",
   },
 
   modalTitle: {
-    margin: "4px 0",
-    color: "#1e3a8a",
+    margin: 0,
+    color: "#1e40af",
   },
 
   modalSubtitle: {
-    margin: 0,
-    color: "#64748b",
+    margin: "6px 0 0",
+    color: "#6b7280",
   },
 
   modalClose: {
     border: "none",
-    background: "#f1f5f9",
-    color: "#334155",
-    width: "36px",
-    height: "36px",
+    background: "#f3f4f6",
     borderRadius: "50%",
-    fontSize: "23px",
+    width: "35px",
+    height: "35px",
+    fontSize: "22px",
     cursor: "pointer",
   },
 
-  modalContent: {
+  modalTableWrapper: {
+    overflowX: "auto",
     padding: "25px",
   },
 
-  materialSummary: {
-    display: "flex",
-    gap: "50px",
-    marginBottom: "20px",
-    padding: "15px",
-    background: "#eff6ff",
-    border: "1px solid #bfdbfe",
-    borderRadius: "10px",
+  checklistTable: {
+    width: "100%",
+    borderCollapse: "collapse",
+    minWidth: "850px",
   },
 
   modalLoading: {
     textAlign: "center",
-    padding: "70px 20px",
+    padding: "60px",
   },
 
   noMaterials: {
     textAlign: "center",
-    padding: "70px 20px",
-    color: "#64748b",
+    padding: "60px",
+    color: "#6b7280",
+  },
+
+  viewDocument: {
+    color: "#2563eb",
+    textDecoration: "none",
+    fontWeight: "600",
+  },
+
+  noDocument: {
+    color: "#9ca3af",
+    fontSize: "13px",
   },
 
   totalLabel: {
     padding: "14px",
     textAlign: "right",
-    fontWeight: "800",
-    background: "#f1f5f9",
+    fontWeight: "bold",
+    background: "#f3f4f6",
   },
 
   totalValue: {
     padding: "14px",
-    fontWeight: "800",
+    fontWeight: "bold",
     color: "#2563eb",
     background: "#eff6ff",
-  },
-
-  totalBlank: {
-    background: "#f1f5f9",
   },
 
   modalFooter: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
-    gap: "20px",
-    padding: "18px 25px",
+    gap: "15px",
+    padding: "20px 25px",
     borderTop: "1px solid #e5e7eb",
   },
 
   footerText: {
     margin: 0,
-    color: "#64748b",
-    fontSize: "12px",
+    color: "#6b7280",
+    fontSize: "13px",
   },
 
   closeButton: {
     border: "none",
-    background: "#334155",
+    background: "#374151",
     color: "#fff",
-    padding: "10px 18px",
+    padding: "10px 20px",
     borderRadius: "7px",
     cursor: "pointer",
-    fontWeight: "700",
   },
 };
 
 export default MyApplications;
+
