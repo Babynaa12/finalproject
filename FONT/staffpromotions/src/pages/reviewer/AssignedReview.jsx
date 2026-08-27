@@ -16,6 +16,7 @@ function AssignedReviews() {
 
   const headers = {
     Authorization: `Bearer ${token}`,
+    "Content-Type": "application/json",
   };
 
   // ============================================================
@@ -53,21 +54,32 @@ function AssignedReviews() {
       );
 
       console.log(
-        "Reviewer assignments:",
+        "============================================"
+      );
+
+      console.log(
+        "REVIEWER ASSIGNMENTS:",
         response.data
+      );
+
+      console.log(
+        "============================================"
       );
 
       let data = response.data;
 
-      if (data?.results) {
+      // DRF pagination support
+      if (data && Array.isArray(data.results)) {
         data = data.results;
       }
 
+      // Make sure data is always an array
       if (!Array.isArray(data)) {
         data = [];
       }
 
       setAssignments(data);
+
     } catch (err) {
       console.error(
         "Failed to load reviewer assignments:",
@@ -75,7 +87,10 @@ function AssignedReviews() {
       );
 
       if (err.response?.status === 401) {
-        localStorage.clear();
+        localStorage.removeItem("access_token");
+        localStorage.removeItem("refresh_token");
+        localStorage.removeItem("role");
+
         navigate("/login");
         return;
       }
@@ -88,8 +103,10 @@ function AssignedReviews() {
       }
 
       setError(
+        err.response?.data?.detail ||
         "Failed to load your assigned promotion reviews."
       );
+
     } finally {
       setLoading(false);
     }
@@ -100,12 +117,45 @@ function AssignedReviews() {
   // ============================================================
 
   const getApplication = (assignment) => {
-    return (
-      assignment.application ||
-      assignment.promotion_application ||
-      assignment.promotionApplication ||
-      {}
-    );
+    if (!assignment) {
+      return {};
+    }
+
+    /*
+      Depending on the serializer, application can be:
+
+      application: 1
+
+      OR
+
+      application: {
+        id: 1,
+        ...
+      }
+    */
+
+    if (
+      assignment.application &&
+      typeof assignment.application === "object"
+    ) {
+      return assignment.application;
+    }
+
+    if (
+      assignment.promotion_application &&
+      typeof assignment.promotion_application === "object"
+    ) {
+      return assignment.promotion_application;
+    }
+
+    if (
+      assignment.promotionApplication &&
+      typeof assignment.promotionApplication === "object"
+    ) {
+      return assignment.promotionApplication;
+    }
+
+    return {};
   };
 
   // ============================================================
@@ -113,14 +163,46 @@ function AssignedReviews() {
   // ============================================================
 
   const getApplicationId = (assignment) => {
+    if (!assignment) {
+      return null;
+    }
+
     const application = getApplication(assignment);
 
-    return (
-      application.id ||
-      assignment.application_id ||
-      assignment.promotion_application_id ||
-      null
-    );
+    /*
+      Priority:
+
+      1. application.id
+      2. application_id
+      3. promotion_application_id
+      4. promotionApplicationId
+      5. application if it is already an ID
+    */
+
+    if (application?.id) {
+      return application.id;
+    }
+
+    if (assignment.application_id) {
+      return assignment.application_id;
+    }
+
+    if (assignment.promotion_application_id) {
+      return assignment.promotion_application_id;
+    }
+
+    if (assignment.promotionApplicationId) {
+      return assignment.promotionApplicationId;
+    }
+
+    if (
+      assignment.application &&
+      typeof assignment.application !== "object"
+    ) {
+      return assignment.application;
+    }
+
+    return null;
   };
 
   // ============================================================
@@ -131,23 +213,23 @@ function AssignedReviews() {
     const application = getApplication(assignment);
 
     const employee =
-      application.employee ||
-      assignment.employee ||
+      application?.employee ||
+      assignment?.employee ||
       {};
 
-    return (
-      assignment.employee_name ||
-      assignment.applicant_name ||
-      application.employee_name ||
-      application.applicant_name ||
-      employee.full_name ||
-      employee.name ||
-      employee.employee_name ||
-      `${employee.first_name || ""} ${
-        employee.last_name || ""
-      }`.trim() ||
-      "N/A"
-    );
+    const name =
+      assignment?.employee_name ||
+      assignment?.applicant_name ||
+      application?.employee_name ||
+      application?.applicant_name ||
+      employee?.full_name ||
+      employee?.name ||
+      employee?.employee_name ||
+      `${employee?.first_name || ""} ${
+        employee?.last_name || ""
+      }`.trim();
+
+    return name || "N/A";
   };
 
   // ============================================================
@@ -158,19 +240,30 @@ function AssignedReviews() {
     const application = getApplication(assignment);
 
     const employee =
-      application.employee ||
-      assignment.employee ||
+      application?.employee ||
+      assignment?.employee ||
       {};
 
-    return (
-      assignment.department_name ||
-      application.department_name ||
-      application.department?.name ||
-      employee.department_name ||
-      employee.department?.name ||
-      employee.department ||
-      "N/A"
-    );
+    const department =
+      assignment?.department_name ||
+      application?.department_name ||
+      application?.department?.name ||
+      employee?.department_name ||
+      employee?.department?.name ||
+      employee?.department;
+
+    if (
+      department &&
+      typeof department === "object"
+    ) {
+      return (
+        department.name ||
+        department.department_name ||
+        "N/A"
+      );
+    }
+
+    return department || "N/A";
   };
 
   // ============================================================
@@ -180,13 +273,24 @@ function AssignedReviews() {
   const getCurrentRank = (assignment) => {
     const application = getApplication(assignment);
 
-    return (
-      application.current_title_name ||
-      application.current_title?.title_name ||
-      application.current_title?.name ||
-      application.current_title ||
-      "N/A"
-    );
+    const rank =
+      application?.current_title_name ||
+      application?.current_title?.title_name ||
+      application?.current_title?.name ||
+      application?.current_title ||
+      assignment?.current_title_name ||
+      assignment?.current_rank ||
+      "N/A";
+
+    if (typeof rank === "object") {
+      return (
+        rank.title_name ||
+        rank.name ||
+        "N/A"
+      );
+    }
+
+    return rank;
   };
 
   // ============================================================
@@ -196,29 +300,49 @@ function AssignedReviews() {
   const getTargetRank = (assignment) => {
     const application = getApplication(assignment);
 
-    return (
-      application.targeted_title_name ||
-      application.targeted_title?.title_name ||
-      application.targeted_title?.name ||
-      application.targeted_title ||
-      "N/A"
-    );
+    const rank =
+      application?.targeted_title_name ||
+      application?.targeted_title?.title_name ||
+      application?.targeted_title?.name ||
+      application?.targeted_title ||
+      application?.target_title_name ||
+      application?.target_rank ||
+      assignment?.targeted_title_name ||
+      assignment?.target_rank ||
+      "N/A";
+
+    if (typeof rank === "object") {
+      return (
+        rank.title_name ||
+        rank.name ||
+        "N/A"
+      );
+    }
+
+    return rank;
   };
 
   // ============================================================
-  // GET REVIEWER
+  // GET REVIEWER NAME
   // ============================================================
 
   const getReviewerName = (assignment) => {
-    return (
+    if (!assignment) {
+      return "You";
+    }
+
+    const reviewer =
+      assignment.reviewer || {};
+
+    const name =
       assignment.reviewer_name ||
-      assignment.reviewer?.full_name ||
-      assignment.reviewer?.name ||
-      `${assignment.reviewer?.first_name || ""} ${
-        assignment.reviewer?.last_name || ""
-      }`.trim() ||
-      "You"
-    );
+      reviewer.full_name ||
+      reviewer.name ||
+      `${reviewer.first_name || ""} ${
+        reviewer.last_name || ""
+      }`.trim();
+
+    return name || "You";
   };
 
   // ============================================================
@@ -226,6 +350,10 @@ function AssignedReviews() {
   // ============================================================
 
   const getStatus = (assignment) => {
+    if (!assignment) {
+      return "PENDING";
+    }
+
     if (assignment.completed === true) {
       return "COMPLETED";
     }
@@ -233,6 +361,7 @@ function AssignedReviews() {
     return (
       assignment.review_status ||
       assignment.status ||
+      assignment.assignment_status ||
       "PENDING"
     );
   };
@@ -255,11 +384,13 @@ function AssignedReviews() {
   // ============================================================
 
   const statusStyle = (status) => {
-    const value = String(status).toLowerCase();
+    const value = String(status || "")
+      .toLowerCase();
 
     if (
       value.includes("completed") ||
-      value.includes("submitted")
+      value.includes("submitted") ||
+      value.includes("approved")
     ) {
       return {
         background: "#dcfce7",
@@ -269,11 +400,22 @@ function AssignedReviews() {
 
     if (
       value.includes("review") ||
-      value.includes("assigned")
+      value.includes("assigned") ||
+      value.includes("in_progress")
     ) {
       return {
         background: "#dbeafe",
         color: "#1d4ed8",
+      };
+    }
+
+    if (
+      value.includes("rejected") ||
+      value.includes("declined")
+    ) {
+      return {
+        background: "#fee2e2",
+        color: "#991b1b",
       };
     }
 
@@ -288,8 +430,44 @@ function AssignedReviews() {
   // ============================================================
 
   const openReview = (assignment) => {
+    if (!assignment) {
+      setError("Invalid reviewer assignment.");
+      return;
+    }
+
+    const assignmentId = assignment.id;
+
     const applicationId =
       getApplicationId(assignment);
+
+    console.log(
+      "============================================"
+    );
+
+    console.log(
+      "OPENING REVIEW"
+    );
+
+    console.log(
+      "Assignment ID:",
+      assignmentId
+    );
+
+    console.log(
+      "Application ID:",
+      applicationId
+    );
+
+    console.log(
+      "============================================"
+    );
+
+    if (!assignmentId) {
+      setError(
+        "This reviewer assignment does not have a valid assignment ID."
+      );
+      return;
+    }
 
     if (!applicationId) {
       setError(
@@ -299,19 +477,32 @@ function AssignedReviews() {
     }
 
     /*
-      IMPORTANT:
+      IMPORTANT
 
-      We send BOTH applicationId and assignmentId.
+      Example:
 
-      applicationId = whose promotion application is being reviewed.
+      assignment.id = 2
+      application_id = 1
 
-      assignmentId = proves that THIS reviewer was assigned
-      to that application.
+      URL:
+
+      /reviewer/review/1?assignment=2
+
+      1 = promotion application
+      2 = reviewer assignment
     */
 
     navigate(
-      `/reviewer/review/${applicationId}?assignment=${assignment.id}`
+      `/reviewer/review/${applicationId}?assignment=${assignmentId}`
     );
+  };
+
+  // ============================================================
+  // REFRESH
+  // ============================================================
+
+  const handleRefresh = () => {
+    loadAssignments();
   };
 
   // ============================================================
@@ -322,9 +513,13 @@ function AssignedReviews() {
     return (
       <div style={styles.page}>
         <div style={styles.loading}>
-          <h2>Assigned Reviews</h2>
+          <div style={styles.spinner}></div>
 
-          <p>
+          <h2 style={styles.loadingTitle}>
+            Assigned Reviews
+          </h2>
+
+          <p style={styles.loadingText}>
             Loading promotion applications assigned
             to you...
           </p>
@@ -334,16 +529,39 @@ function AssignedReviews() {
   }
 
   // ============================================================
+  // SUMMARY COUNTS
+  // ============================================================
+
+  const assignedCount =
+    assignments.length;
+
+  const completedCount =
+    assignments.filter(
+      (item) =>
+        item.completed === true ||
+        String(
+          getStatus(item)
+        ).toLowerCase().includes("completed")
+    ).length;
+
+  const pendingCount =
+    assignedCount - completedCount;
+
+  // ============================================================
   // PAGE
   // ============================================================
 
   return (
     <div style={styles.page}>
+
       <div style={styles.container}>
 
-        {/* HEADER */}
+        {/* ====================================================
+            HEADER
+        ==================================================== */}
 
         <div style={styles.header}>
+
           <div>
             <h1 style={styles.title}>
               Assigned Reviews
@@ -355,79 +573,131 @@ function AssignedReviews() {
             </p>
           </div>
 
-          <button
-            onClick={() =>
-              navigate("/reviewer/dashboard")
-            }
-            style={styles.secondaryButton}
-          >
-            ← Dashboard
-          </button>
+          <div style={styles.headerActions}>
+
+            <button
+              onClick={handleRefresh}
+              style={styles.refreshButton}
+            >
+              ↻ Refresh
+            </button>
+
+            <button
+              onClick={() =>
+                navigate("/reviewer/dashboard")
+              }
+              style={styles.secondaryButton}
+            >
+              ← Dashboard
+            </button>
+
+          </div>
+
         </div>
 
-        {/* ERROR */}
+
+        {/* ====================================================
+            ERROR
+        ==================================================== */}
 
         {error && (
           <div style={styles.error}>
-            <strong>Error</strong>
 
-            <div style={{ marginTop: "5px" }}>
-              {error}
+            <div style={styles.errorIcon}>
+              !
             </div>
+
+            <div>
+              <strong>Error</strong>
+
+              <div style={styles.errorMessage}>
+                {error}
+              </div>
+            </div>
+
           </div>
         )}
 
-        {/* SUMMARY */}
+
+        {/* ====================================================
+            SUMMARY
+        ==================================================== */}
 
         <div style={styles.summaryGrid}>
 
-          <div style={styles.summaryCard}>
-            <span style={styles.summaryLabel}>
-              ASSIGNED
-            </span>
+          {/* ASSIGNED */}
 
-            <strong style={styles.summaryValue}>
-              {assignments.length}
-            </strong>
+          <div style={styles.summaryCard}>
+
+            <div style={styles.summaryIconBlue}>
+              📋
+            </div>
+
+            <div>
+              <span style={styles.summaryLabel}>
+                ASSIGNED
+              </span>
+
+              <strong style={styles.summaryValue}>
+                {assignedCount}
+              </strong>
+            </div>
+
           </div>
 
-          <div style={styles.summaryCard}>
-            <span style={styles.summaryLabel}>
-              PENDING
-            </span>
 
-            <strong style={styles.summaryValue}>
-              {
-                assignments.filter(
-                  (item) =>
-                    !item.completed
-                ).length
-              }
-            </strong>
+          {/* PENDING */}
+
+          <div style={styles.summaryCard}>
+
+            <div style={styles.summaryIconYellow}>
+              ⏳
+            </div>
+
+            <div>
+              <span style={styles.summaryLabel}>
+                PENDING
+              </span>
+
+              <strong style={styles.summaryValue}>
+                {pendingCount}
+              </strong>
+            </div>
+
           </div>
 
-          <div style={styles.summaryCard}>
-            <span style={styles.summaryLabel}>
-              COMPLETED
-            </span>
 
-            <strong style={styles.summaryValue}>
-              {
-                assignments.filter(
-                  (item) =>
-                    item.completed === true
-                ).length
-              }
-            </strong>
+          {/* COMPLETED */}
+
+          <div style={styles.summaryCard}>
+
+            <div style={styles.summaryIconGreen}>
+              ✓
+            </div>
+
+            <div>
+              <span style={styles.summaryLabel}>
+                COMPLETED
+              </span>
+
+              <strong style={styles.summaryValue}>
+                {completedCount}
+              </strong>
+            </div>
+
           </div>
 
         </div>
 
-        {/* ASSIGNMENTS */}
+
+        {/* ====================================================
+            ASSIGNMENTS CARD
+        ==================================================== */}
 
         <div style={styles.card}>
 
           <div style={styles.cardHeader}>
+
             <div>
               <h2 style={styles.cardTitle}>
                 My Assigned Promotion Applications
@@ -438,31 +708,59 @@ function AssignedReviews() {
                 submitted academic materials.
               </p>
             </div>
+
+            <div style={styles.assignmentCount}>
+              {assignments.length} Assignment
+              {assignments.length !== 1
+                ? "s"
+                : ""}
+            </div>
+
           </div>
 
+
+          {/* ==================================================
+              NO ASSIGNMENTS
+          ================================================== */}
+
           {assignments.length === 0 ? (
+
             <div style={styles.empty}>
 
               <div style={styles.emptyIcon}>
                 ✓
               </div>
 
-              <h3>
+              <h3 style={styles.emptyTitle}>
                 No Reviews Assigned
               </h3>
 
-              <p>
+              <p style={styles.emptyText}>
                 You currently have no promotion
                 applications assigned to you.
               </p>
 
+              <button
+                onClick={handleRefresh}
+                style={styles.reviewButton}
+              >
+                Refresh Assignments
+              </button>
+
             </div>
+
           ) : (
+
+            /* ==================================================
+               TABLE
+            ================================================== */
+
             <div style={styles.tableWrapper}>
 
               <table style={styles.table}>
 
                 <thead>
+
                   <tr>
 
                     <th style={styles.th}>
@@ -498,7 +796,9 @@ function AssignedReviews() {
                     </th>
 
                   </tr>
+
                 </thead>
+
 
                 <tbody>
 
@@ -510,12 +810,47 @@ function AssignedReviews() {
                           assignment
                         );
 
+                      const applicantName =
+                        getApplicantName(
+                          assignment
+                        );
+
+                      const department =
+                        getDepartment(
+                          assignment
+                        );
+
+                      const currentRank =
+                        getCurrentRank(
+                          assignment
+                        );
+
+                      const targetRank =
+                        getTargetRank(
+                          assignment
+                        );
+
+                      const reviewerName =
+                        getReviewerName(
+                          assignment
+                        );
+
                       const status =
                         getStatus(
                           assignment
                         );
 
+                      const isCompleted =
+                        assignment.completed ===
+                          true ||
+                        String(status)
+                          .toLowerCase()
+                          .includes(
+                            "completed"
+                          );
+
                       return (
+
                         <tr
                           key={
                             assignment.id
@@ -527,10 +862,13 @@ function AssignedReviews() {
 
                           {/* APPLICATION ID */}
 
-                          <td
-                            style={styles.td}
-                          >
-                            <strong>
+                          <td style={styles.td}>
+
+                            <div
+                              style={
+                                styles.applicationId
+                              }
+                            >
                               APP-
                               {String(
                                 applicationId ||
@@ -539,103 +877,105 @@ function AssignedReviews() {
                                 3,
                                 "0"
                               )}
-                            </strong>
+                            </div>
+
                           </td>
+
 
                           {/* APPLICANT */}
 
-                          <td
-                            style={styles.td}
-                          >
+                          <td style={styles.td}>
+
                             <div
                               style={
                                 styles.applicant
                               }
                             >
+
                               <div
                                 style={
                                   styles.avatar
                                 }
                               >
-                                {
-                                  getApplicantName(
-                                    assignment
-                                  )
-                                    .charAt(0)
-                                    .toUpperCase()
-                                }
+                                {applicantName
+                                  .charAt(0)
+                                  .toUpperCase()}
                               </div>
 
-                              <span>
-                                {
-                                  getApplicantName(
-                                    assignment
-                                  )
-                                }
-                              </span>
+                              <div>
+
+                                <div
+                                  style={
+                                    styles.applicantName
+                                  }
+                                >
+                                  {applicantName}
+                                </div>
+
+                                <div
+                                  style={
+                                    styles.smallText
+                                  }
+                                >
+                                  Application #
+                                  {applicationId ||
+                                    assignment.id}
+                                </div>
+
+                              </div>
+
                             </div>
+
                           </td>
+
 
                           {/* DEPARTMENT */}
 
-                          <td
-                            style={styles.td}
-                          >
-                            {
-                              getDepartment(
-                                assignment
-                              )
-                            }
+                          <td style={styles.td}>
+                            {department}
                           </td>
+
 
                           {/* CURRENT RANK */}
 
-                          <td
-                            style={styles.td}
-                          >
-                            {
-                              getCurrentRank(
-                                assignment
-                              )
-                            }
+                          <td style={styles.td}>
+                            {currentRank}
                           </td>
+
 
                           {/* TARGET RANK */}
 
-                          <td
-                            style={styles.td}
-                          >
-                            {
-                              getTargetRank(
-                                assignment
-                              )
-                            }
+                          <td style={styles.td}>
+
+                            <span
+                              style={
+                                styles.targetRank
+                              }
+                            >
+                              {targetRank}
+                            </span>
+
                           </td>
+
 
                           {/* REVIEWER */}
 
-                          <td
-                            style={styles.td}
-                          >
-                            {
-                              getReviewerName(
-                                assignment
-                              )
-                            }
+                          <td style={styles.td}>
+                            {reviewerName}
                           </td>
+
 
                           {/* STATUS */}
 
-                          <td
-                            style={styles.td}
-                          >
+                          <td style={styles.td}>
+
                             <span
                               style={{
                                 ...statusStyle(
                                   status
                                 ),
                                 padding:
-                                  "6px 11px",
+                                  "6px 12px",
                                 borderRadius:
                                   "20px",
                                 fontSize:
@@ -644,19 +984,21 @@ function AssignedReviews() {
                                   "700",
                                 display:
                                   "inline-block",
+                                whiteSpace:
+                                  "nowrap",
                               }}
                             >
                               {formatStatus(
                                 status
                               )}
                             </span>
+
                           </td>
+
 
                           {/* ACTION */}
 
-                          <td
-                            style={styles.td}
-                          >
+                          <td style={styles.td}>
 
                             <button
                               onClick={() =>
@@ -665,17 +1007,22 @@ function AssignedReviews() {
                                 )
                               }
                               style={
-                                styles.reviewButton
+                                isCompleted
+                                  ? styles.viewButton
+                                  : styles.reviewButton
                               }
                             >
-                              {assignment.completed
+
+                              {isCompleted
                                 ? "View Review"
                                 : "Review Materials"}
+
                             </button>
 
                           </td>
 
                         </tr>
+
                       );
                     }
                   )}
@@ -685,17 +1032,30 @@ function AssignedReviews() {
               </table>
 
             </div>
+
           )}
 
         </div>
 
-        {/* GUIDANCE */}
+
+        {/* ====================================================
+            GUIDANCE
+        ==================================================== */}
 
         <div style={styles.guidance}>
 
-          <h3 style={styles.guidanceTitle}>
-            Reviewer Guidance
-          </h3>
+          <div style={styles.guidanceHeader}>
+
+            <div style={styles.guidanceIcon}>
+              i
+            </div>
+
+            <h3 style={styles.guidanceTitle}>
+              Reviewer Guidance
+            </h3>
+
+          </div>
+
 
           <ul style={styles.guidanceList}>
 
@@ -706,7 +1066,7 @@ function AssignedReviews() {
 
             <li>
               Open the assigned application to
-              view all submitted promotion materials.
+              view all submitted academic materials.
             </li>
 
             <li>
@@ -730,9 +1090,10 @@ function AssignedReviews() {
             </li>
 
             <li>
-              Reviewer status becomes COMPLETED only
-              after all required materials have been
-              reviewed.
+              Reviewer status becomes
+              <strong> COMPLETED </strong>
+              only after all required materials have
+              been reviewed.
             </li>
 
           </ul>
@@ -740,9 +1101,11 @@ function AssignedReviews() {
         </div>
 
       </div>
+
     </div>
   );
 }
+
 
 // ============================================================
 // STYLES
@@ -758,9 +1121,13 @@ const styles = {
   },
 
   container: {
-    maxWidth: "1400px",
+    maxWidth: "1450px",
     margin: "0 auto",
   },
+
+  // ==========================================================
+  // HEADER
+  // ==========================================================
 
   header: {
     display: "flex",
@@ -773,14 +1140,32 @@ const styles = {
 
   title: {
     margin: 0,
-    fontSize: "28px",
+    fontSize: "30px",
     fontWeight: "700",
     color: "#111827",
   },
 
   subtitle: {
     marginTop: "8px",
+    marginBottom: 0,
     color: "#6b7280",
+    fontSize: "15px",
+  },
+
+  headerActions: {
+    display: "flex",
+    gap: "10px",
+    alignItems: "center",
+  },
+
+  refreshButton: {
+    background: "#ffffff",
+    color: "#374151",
+    border: "1px solid #d1d5db",
+    padding: "10px 16px",
+    borderRadius: "7px",
+    cursor: "pointer",
+    fontWeight: "600",
   },
 
   secondaryButton: {
@@ -793,6 +1178,10 @@ const styles = {
     fontWeight: "600",
   },
 
+  // ==========================================================
+  // ERROR
+  // ==========================================================
+
   error: {
     background: "#fee2e2",
     color: "#991b1b",
@@ -800,12 +1189,36 @@ const styles = {
     padding: "15px 18px",
     borderRadius: "8px",
     marginBottom: "20px",
+    display: "flex",
+    alignItems: "flex-start",
+    gap: "12px",
   },
+
+  errorIcon: {
+    width: "25px",
+    height: "25px",
+    borderRadius: "50%",
+    background: "#dc2626",
+    color: "#ffffff",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontWeight: "700",
+    flexShrink: 0,
+  },
+
+  errorMessage: {
+    marginTop: "5px",
+  },
+
+  // ==========================================================
+  // SUMMARY
+  // ==========================================================
 
   summaryGrid: {
     display: "grid",
     gridTemplateColumns:
-      "repeat(auto-fit, minmax(200px, 1fr))",
+      "repeat(auto-fit, minmax(220px, 1fr))",
     gap: "18px",
     marginBottom: "25px",
   },
@@ -817,6 +1230,42 @@ const styles = {
     padding: "20px",
     boxShadow:
       "0 2px 6px rgba(0,0,0,0.04)",
+    display: "flex",
+    alignItems: "center",
+    gap: "15px",
+  },
+
+  summaryIconBlue: {
+    width: "45px",
+    height: "45px",
+    borderRadius: "10px",
+    background: "#dbeafe",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: "21px",
+  },
+
+  summaryIconYellow: {
+    width: "45px",
+    height: "45px",
+    borderRadius: "10px",
+    background: "#fef3c7",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: "21px",
+  },
+
+  summaryIconGreen: {
+    width: "45px",
+    height: "45px",
+    borderRadius: "10px",
+    background: "#dcfce7",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: "21px",
   },
 
   summaryLabel: {
@@ -829,10 +1278,14 @@ const styles = {
 
   summaryValue: {
     display: "block",
-    marginTop: "8px",
-    fontSize: "28px",
+    marginTop: "5px",
+    fontSize: "27px",
     color: "#111827",
   },
+
+  // ==========================================================
+  // CARD
+  // ==========================================================
 
   card: {
     background: "#ffffff",
@@ -846,6 +1299,11 @@ const styles = {
   cardHeader: {
     padding: "22px",
     borderBottom: "1px solid #e5e7eb",
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: "15px",
+    flexWrap: "wrap",
   },
 
   cardTitle: {
@@ -857,7 +1315,21 @@ const styles = {
   cardDescription: {
     margin: "7px 0 0",
     color: "#6b7280",
+    fontSize: "14px",
   },
+
+  assignmentCount: {
+    background: "#eff6ff",
+    color: "#1d4ed8",
+    borderRadius: "20px",
+    padding: "7px 12px",
+    fontSize: "12px",
+    fontWeight: "700",
+  },
+
+  // ==========================================================
+  // TABLE
+  // ==========================================================
 
   tableWrapper: {
     overflowX: "auto",
@@ -866,7 +1338,7 @@ const styles = {
   table: {
     width: "100%",
     borderCollapse: "collapse",
-    minWidth: "1100px",
+    minWidth: "1200px",
   },
 
   th: {
@@ -894,16 +1366,25 @@ const styles = {
     background: "#ffffff",
   },
 
+  applicationId: {
+    fontWeight: "700",
+    color: "#1d4ed8",
+  },
+
+  // ==========================================================
+  // APPLICANT
+  // ==========================================================
+
   applicant: {
     display: "flex",
     alignItems: "center",
     gap: "10px",
-    minWidth: "180px",
+    minWidth: "200px",
   },
 
   avatar: {
-    width: "34px",
-    height: "34px",
+    width: "38px",
+    height: "38px",
     borderRadius: "50%",
     background: "#dbeafe",
     color: "#1d4ed8",
@@ -913,6 +1394,26 @@ const styles = {
     fontWeight: "700",
     flexShrink: 0,
   },
+
+  applicantName: {
+    fontWeight: "600",
+    color: "#111827",
+  },
+
+  smallText: {
+    marginTop: "3px",
+    fontSize: "11px",
+    color: "#9ca3af",
+  },
+
+  targetRank: {
+    fontWeight: "600",
+    color: "#1d4ed8",
+  },
+
+  // ==========================================================
+  // BUTTONS
+  // ==========================================================
 
   reviewButton: {
     background: "#2563eb",
@@ -925,15 +1426,30 @@ const styles = {
     whiteSpace: "nowrap",
   },
 
+  viewButton: {
+    background: "#f3f4f6",
+    color: "#374151",
+    border: "1px solid #d1d5db",
+    borderRadius: "6px",
+    padding: "9px 14px",
+    cursor: "pointer",
+    fontWeight: "600",
+    whiteSpace: "nowrap",
+  },
+
+  // ==========================================================
+  // EMPTY
+  // ==========================================================
+
   empty: {
     textAlign: "center",
-    padding: "60px 20px",
+    padding: "65px 20px",
     color: "#6b7280",
   },
 
   emptyIcon: {
-    width: "55px",
-    height: "55px",
+    width: "60px",
+    height: "60px",
     margin: "0 auto 15px",
     borderRadius: "50%",
     background: "#dcfce7",
@@ -941,9 +1457,22 @@ const styles = {
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    fontSize: "25px",
+    fontSize: "27px",
     fontWeight: "700",
   },
+
+  emptyTitle: {
+    color: "#111827",
+    marginBottom: "8px",
+  },
+
+  emptyText: {
+    marginBottom: "20px",
+  },
+
+  // ==========================================================
+  // GUIDANCE
+  // ==========================================================
 
   guidance: {
     background: "#eff6ff",
@@ -953,8 +1482,26 @@ const styles = {
     marginTop: "25px",
   },
 
+  guidanceHeader: {
+    display: "flex",
+    alignItems: "center",
+    gap: "10px",
+  },
+
+  guidanceIcon: {
+    width: "25px",
+    height: "25px",
+    borderRadius: "50%",
+    background: "#2563eb",
+    color: "#ffffff",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontWeight: "700",
+  },
+
   guidanceTitle: {
-    marginTop: 0,
+    margin: 0,
     color: "#1e3a8a",
   },
 
@@ -965,14 +1512,42 @@ const styles = {
     lineHeight: "1.8",
   },
 
+  // ==========================================================
+  // LOADING
+  // ==========================================================
+
   loading: {
     maxWidth: "600px",
     margin: "100px auto",
     background: "#ffffff",
     border: "1px solid #e5e7eb",
     borderRadius: "10px",
-    padding: "40px",
+    padding: "45px",
     textAlign: "center",
+    boxShadow:
+      "0 2px 6px rgba(0,0,0,0.04)",
+  },
+
+  spinner: {
+    width: "38px",
+    height: "38px",
+    border:
+      "4px solid #e5e7eb",
+    borderTop:
+      "4px solid #2563eb",
+    borderRadius: "50%",
+    margin: "0 auto 20px",
+    animation:
+      "spin 1s linear infinite",
+  },
+
+  loadingTitle: {
+    marginBottom: "8px",
+    color: "#111827",
+  },
+
+  loadingText: {
+    color: "#6b7280",
   },
 };
 

@@ -1,493 +1,862 @@
 import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 
 const API_URL = "http://127.0.0.1:8000/api";
 
-/*
-|--------------------------------------------------------------------------
-| Academic Material Review - Form C
-|--------------------------------------------------------------------------
-|
-| Reviewer workflow:
-|
-| Assigned Review
-|       ↓
-| Application
-|       ↓
-| Applicant
-|       ↓
-| Promotion Materials
-|       ↓
-| Review every material
-|       ↓
-| Submit AcademicMaterialReview
-|       ↓
-| All materials reviewed?
-|       ↓
-| ReviewerAssignment = COMPLETED
-|
-|--------------------------------------------------------------------------
-*/
+function ReviewMaterial() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const params = useParams();
 
-function ReviewMaterial({ assignmentId: assignmentIdProp }) {
-  // =====================================================================
+  // ============================================================
+  // URL
+  // ============================================================
+
+  const searchParams = new URLSearchParams(location.search);
+
+  /*
+    Your URL is:
+
+    /reviewer/review/1?assignment=2
+
+    Therefore:
+
+    applicationId = 1
+    assignmentId  = 2
+  */
+
+  const applicationId = useMemo(() => {
+    return (
+      params.applicationId ||
+      params.id ||
+      params.pk ||
+      searchParams.get("applicationId") ||
+      searchParams.get("application_id") ||
+      searchParams.get("application") ||
+      location.pathname.match(
+        /\/reviewer\/review\/([^/?]+)/
+      )?.[1] ||
+      null
+    );
+  }, [params, location.pathname, location.search]);
+
+  const assignmentId = useMemo(() => {
+    return (
+      searchParams.get("assignment") ||
+      searchParams.get("assignmentId") ||
+      searchParams.get("assignment_id") ||
+      null
+    );
+  }, [location.search]);
+
+  // ============================================================
   // AUTH
-  // =====================================================================
+  // ============================================================
 
   const token =
     localStorage.getItem("access_token") ||
     localStorage.getItem("token");
 
-  const headers = useMemo(
-    () => ({
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    }),
-    [token]
-  );
+  const role = localStorage.getItem("role");
 
-  // =====================================================================
+  const headers = {
+    Authorization: `Bearer ${token}`,
+  };
+
+  // ============================================================
   // STATE
-  // =====================================================================
+  // ============================================================
 
   const [assignment, setAssignment] = useState(null);
+
   const [application, setApplication] = useState(null);
+
   const [materials, setMaterials] = useState([]);
+
   const [reviews, setReviews] = useState([]);
 
   const [loading, setLoading] = useState(true);
+
   const [submitting, setSubmitting] = useState(false);
 
   const [error, setError] = useState("");
+
   const [success, setSuccess] = useState("");
 
-  const [selectedMaterial, setSelectedMaterial] = useState(null);
-  const [showReviewForm, setShowReviewForm] = useState(false);
+  const [reviewForms, setReviewForms] = useState({});
 
-  // =====================================================================
-  // REVIEW FORM
-  // =====================================================================
+  // ============================================================
+  // INITIALIZATION
+  // ============================================================
 
-  const initialReview = {
-    authenticity: "",
-    originality: "",
-    coverage_of_subject: "",
-    contribution_to_knowledge: "",
-    relevance_to_discipline: "",
-    presentation_quality: "",
-    technical_recommendation: "",
-
-    grade: "",
-    points: "",
-
-    overall_quality: "",
-    strengths: "",
-    shortcomings: "",
-
-    reviewer_name: "",
-    reviewer_academic_rank: "",
-    reviewer_affiliation: "",
-    reviewer_signature_date: "",
-  };
-
-  const [reviewForm, setReviewForm] = useState(initialReview);
-
-  // =====================================================================
-  // HELPERS
-  // =====================================================================
-
-  const getName = (person) => {
-    if (!person) return "N/A";
-
-    if (typeof person === "string") return person;
-
-    return (
-      person.full_name ||
-      person.name ||
-      person.employee_name ||
-      person.username ||
-      `${person.first_name || ""} ${
-        person.last_name || ""
-      }`.trim() ||
-      "N/A"
-    );
-  };
-
-  const getDepartmentName = (department) => {
-    if (!department) return "N/A";
-
-    if (typeof department === "string") {
-      return department;
+  useEffect(() => {
+    if (!token) {
+      navigate("/login");
+      return;
     }
 
-    return (
-      department.name ||
-      department.department_name ||
-      department.title ||
-      department.code ||
-      "N/A"
-    );
-  };
+    if (
+      role &&
+      role.toUpperCase() !== "REVIEWER"
+    ) {
+      navigate("/login");
+      return;
+    }
 
-  const getRank = (employee) => {
-    if (!employee) return "N/A";
+    initialize();
+  }, [applicationId, assignmentId]);
 
-    return (
-      employee.academic_rank ||
-      employee.rank ||
-      employee.position ||
-      employee.current_rank ||
-      employee.designation ||
-      "N/A"
-    );
-  };
+  // ============================================================
+  // HELPERS
+  // ============================================================
 
-  const getApplicationId = (app) => {
-    if (!app) return "N/A";
-
-    return (
-      app.application_number ||
-      app.application_id ||
-      app.reference_number ||
-      app.reference ||
-      app.id ||
-      "N/A"
-    );
-  };
-
-  const normalizeArray = (data) => {
+  const unwrap = (data) => {
     if (Array.isArray(data)) {
       return data;
     }
 
-    if (data?.results && Array.isArray(data.results)) {
+    if (Array.isArray(data?.results)) {
       return data.results;
-    }
-
-    if (data?.materials && Array.isArray(data.materials)) {
-      return data.materials;
-    }
-
-    if (data?.reviews && Array.isArray(data.reviews)) {
-      return data.reviews;
-    }
-
-    if (data?.assignments && Array.isArray(data.assignments)) {
-      return data.assignments;
     }
 
     return [];
   };
 
-  // =====================================================================
-  // GET ASSIGNMENT ID
-  // =====================================================================
-
-  const getAssignmentId = () => {
-    if (assignmentIdProp) {
-      return assignmentIdProp;
-    }
-
-    const storedAssignmentId =
-      localStorage.getItem("reviewer_assignment_id");
-
-    if (storedAssignmentId) {
-      return storedAssignmentId;
-    }
-
-    const params = new URLSearchParams(window.location.search);
-
-    return (
-      params.get("assignment") ||
-      params.get("assignmentId") ||
-      params.get("id")
-    );
-  };
-
-  // =====================================================================
-  // LOAD ASSIGNMENT
-  // =====================================================================
-
-  const loadAssignment = async () => {
-    const assignmentId = getAssignmentId();
-
-    if (!assignmentId) {
-      throw new Error(
-        "No reviewer assignment was selected."
-      );
-    }
-
-    try {
-      const response = await axios.get(
-        `${API_URL}/reviewer-assignments/${assignmentId}/`,
-        { headers }
-      );
-
-      console.log(
-        "Reviewer assignment:",
-        response.data
-      );
-
-      setAssignment(response.data);
-
-      return response.data;
-    } catch (error) {
-      console.error(
-        "Failed to load reviewer assignment:",
-        error.response?.data || error
-      );
-
-      throw new Error(
-        "Unable to retrieve the assigned review."
-      );
-    }
-  };
-
-  // =====================================================================
-  // LOAD REVIEWS
-  // =====================================================================
-
-  const loadReviews = async () => {
-    try {
-      const response = await axios.get(
-        `${API_URL}/academic-material-reviews/`,
-        { headers }
-      );
-
-      const data = normalizeArray(response.data);
-
-      console.log(
-        "Academic material reviews:",
-        data
-      );
-
-      setReviews(data);
-
-      return data;
-    } catch (error) {
-      console.error(
-        "Failed to load academic material reviews:",
-        error.response?.data || error
-      );
-
-      setReviews([]);
-
-      return [];
-    }
-  };
-
-  // =====================================================================
-  // FIND APPLICATION FROM ASSIGNMENT
-  // =====================================================================
-
-  const extractApplication = (assignmentData) => {
-    if (!assignmentData) {
+  const normalizeId = (value) => {
+    if (
+      value === null ||
+      value === undefined ||
+      value === ""
+    ) {
       return null;
     }
 
-    if (assignmentData.application) {
-      if (
-        typeof assignmentData.application === "object"
-      ) {
-        return assignmentData.application;
-      }
+    if (typeof value === "object") {
+      return (
+        value.id ||
+        value.pk ||
+        value.application_id ||
+        value.material_id ||
+        null
+      );
     }
 
-    return null;
+    return String(value);
   };
 
-  // =====================================================================
-  // LOAD MATERIALS
-  // =====================================================================
+  const sameId = (a, b) => {
+    const first = normalizeId(a);
+    const second = normalizeId(b);
 
-  const loadMaterials = async (applicationData) => {
-    if (!applicationData) {
-      setMaterials([]);
-      return [];
+    if (!first || !second) {
+      return false;
     }
 
-    /*
-     * Different serializer implementations may expose materials as:
-     *
-     * application.materials
-     * application.promotion_materials
-     * application.application_materials
-     */
+    return String(first) === String(second);
+  };
 
-    let embeddedMaterials =
-      applicationData.materials ||
-      applicationData.promotion_materials ||
-      applicationData.application_materials;
+  const getObjectId = (obj) => {
+    if (!obj) return null;
 
-    if (Array.isArray(embeddedMaterials)) {
-      setMaterials(embeddedMaterials);
-      return embeddedMaterials;
-    }
+    return (
+      obj.id ||
+      obj.pk ||
+      obj.application_id ||
+      null
+    );
+  };
 
-    /*
-     * If materials are not nested inside application,
-     * try the promotion-materials endpoint.
-     */
+  // ============================================================
+  // GET APPLICATION ID FROM OBJECT
+  // ============================================================
 
+  const getApplicationIdFromObject = (obj) => {
+    if (!obj) return null;
+
+    return (
+      obj.application_id ||
+      obj.application?.id ||
+      obj.application?.pk ||
+      obj.promotion_application_id ||
+      obj.promotion_application?.id ||
+      obj.promotion_application?.pk ||
+      obj.promotionApplication?.id ||
+      obj.promotionApplication?.pk ||
+      null
+    );
+  };
+
+  // ============================================================
+  // GET MATERIAL ID
+  // ============================================================
+
+  const getMaterialId = (material) => {
+    if (!material) return null;
+
+    return (
+      material.id ||
+      material.pk ||
+      material.material_id ||
+      null
+    );
+  };
+
+  // ============================================================
+  // GET REVIEW MATERIAL ID
+  // ============================================================
+
+  const getReviewMaterialId = (review) => {
+    if (!review) return null;
+
+    return (
+      review.material_id ||
+      review.academic_material_id ||
+      review.promotion_material_id ||
+      review.material?.id ||
+      review.material?.pk ||
+      review.academic_material?.id ||
+      review.academic_material?.pk ||
+      review.promotion_material?.id ||
+      review.promotion_material?.pk ||
+      null
+    );
+  };
+
+  // ============================================================
+  // GET REVIEW APPLICATION ID
+  // ============================================================
+
+  const getReviewApplicationId = (review) => {
+    if (!review) return null;
+
+    return (
+      review.application_id ||
+      review.application?.id ||
+      review.application?.pk ||
+      review.promotion_application_id ||
+      review.promotion_application?.id ||
+      review.promotion_application?.pk ||
+      null
+    );
+  };
+
+  // ============================================================
+  // GET REVIEW ASSIGNMENT ID
+  // ============================================================
+
+  const getReviewAssignmentId = (review) => {
+    if (!review) return null;
+
+    return (
+      review.assignment_id ||
+      review.reviewer_assignment_id ||
+      review.assignment?.id ||
+      review.reviewer_assignment?.id ||
+      null
+    );
+  };
+
+  // ============================================================
+  // GET REVIEWER ID
+  // ============================================================
+
+  const getReviewReviewerId = (review) => {
+    if (!review) return null;
+
+    return (
+      review.reviewer_id ||
+      review.reviewer?.id ||
+      review.reviewer ||
+      null
+    );
+  };
+
+  // ============================================================
+  // INITIALIZE
+  // ============================================================
+
+  const initialize = async () => {
     try {
-      const applicationId = applicationData.id;
-
-      if (!applicationId) {
-        setMaterials([]);
-        return [];
-      }
-
-      const response = await axios.get(
-        `${API_URL}/promotion-materials/`,
-        {
-          headers,
-          params: {
-            application: applicationId,
-          },
-        }
-      );
-
-      const data = normalizeArray(response.data);
+      setLoading(true);
+      setError("");
+      setSuccess("");
 
       console.log(
-        "Promotion materials:",
-        data
+        "============================================"
       );
 
-      setMaterials(data);
-
-      return data;
-    } catch (error) {
-      console.error(
-        "Failed to load promotion materials:",
-        error.response?.data || error
+      console.log(
+        "REVIEW MATERIAL INITIALIZATION"
       );
 
-      /*
-       * Some systems use:
-       *
-       * /api/promotion-materials/?promotion_application=<id>
-       *
-       * Try that as a fallback.
-       */
+      console.log(
+        "Application ID:",
+        applicationId
+      );
 
-      try {
-        const applicationId = applicationData.id;
+      console.log(
+        "Assignment ID:",
+        assignmentId
+      );
 
-        const response = await axios.get(
-          `${API_URL}/promotion-materials/`,
+      console.log(
+        "Current URL:",
+        window.location.href
+      );
+
+      console.log(
+        "============================================"
+      );
+
+      if (!applicationId) {
+        throw new Error(
+          "No promotion application was selected."
+        );
+      }
+
+      if (!assignmentId) {
+        throw new Error(
+          "No reviewer assignment was selected."
+        );
+      }
+
+      // --------------------------------------------------------
+      // 1. LOAD ASSIGNMENT
+      // --------------------------------------------------------
+
+      const assignmentResponse =
+        await axios.get(
+          `${API_URL}/reviewer-assignments/`,
           {
             headers,
-            params: {
-              promotion_application: applicationId,
-            },
           }
         );
 
-        const data = normalizeArray(response.data);
+      const assignments =
+        unwrap(assignmentResponse.data);
 
-        setMaterials(data);
+      console.log(
+        "Reviewer assignments:",
+        assignments
+      );
 
-        return data;
-      } catch (secondError) {
-        console.error(
-          "Second material request failed:",
-          secondError.response?.data || secondError
+      const selectedAssignment =
+        assignments.find((item) => {
+          return sameId(
+            item.id,
+            assignmentId
+          );
+        });
+
+      if (!selectedAssignment) {
+        throw new Error(
+          `Reviewer assignment ${assignmentId} was not found.`
         );
-
-        setMaterials([]);
-
-        return [];
       }
-    }
-  };
 
-  // =====================================================================
-  // INITIALIZE
-  // =====================================================================
+      console.log(
+        "Selected reviewer assignment:",
+        selectedAssignment
+      );
 
-  useEffect(() => {
-    const initialize = async () => {
-      if (!token) {
-        setError(
-          "Your login session has expired. Please login again."
+      setAssignment(selectedAssignment);
+
+      // --------------------------------------------------------
+      // VERIFY APPLICATION
+      // --------------------------------------------------------
+
+      const assignmentApplicationId =
+        getApplicationIdFromObject(
+          selectedAssignment
         );
 
-        setLoading(false);
+      if (
+        assignmentApplicationId &&
+        !sameId(
+          assignmentApplicationId,
+          applicationId
+        )
+      ) {
+        throw new Error(
+          "The selected reviewer assignment does not belong to this promotion application."
+        );
+      }
 
+      // --------------------------------------------------------
+      // 2. LOAD APPLICATION
+      // --------------------------------------------------------
+
+      const applicationResponse =
+        await axios.get(
+          `${API_URL}/applications/${applicationId}/`,
+          {
+            headers,
+          }
+        );
+
+      console.log(
+        "Promotion application:",
+        applicationResponse.data
+      );
+
+      setApplication(
+        applicationResponse.data
+      );
+
+      // --------------------------------------------------------
+      // 3. LOAD MATERIALS
+      // --------------------------------------------------------
+
+      const materialsResponse =
+        await axios.get(
+          `${API_URL}/promotion-materials/`,
+          {
+            headers,
+          }
+        );
+
+      const allMaterials =
+        unwrap(materialsResponse.data);
+
+      console.log(
+        "Promotion materials:",
+        allMaterials
+      );
+
+      /*
+        IMPORTANT FIX:
+
+        Do NOT assume the API always returns:
+
+        material.application === 1
+
+        It can return:
+
+        application: 1
+        application_id: 1
+        application: { id: 1 }
+        promotion_application: 1
+        promotion_application_id: 1
+        etc.
+      */
+
+      const filteredMaterials =
+        allMaterials.filter((material) => {
+          const materialApplicationId =
+            getApplicationIdFromObject(
+              material
+            );
+
+          return sameId(
+            materialApplicationId,
+            applicationId
+          );
+        });
+
+      console.log(
+        "Filtered promotion materials:",
+        filteredMaterials
+      );
+
+      /*
+        If the serializer does not expose application_id
+        but the endpoint has already been filtered by backend,
+        keep the returned materials instead of incorrectly
+        displaying zero.
+      */
+
+      let finalMaterials =
+        filteredMaterials;
+
+      if (
+        finalMaterials.length === 0 &&
+        allMaterials.length > 0
+      ) {
+        const belongsToApplication =
+          allMaterials.some((material) => {
+            const id =
+              getApplicationIdFromObject(
+                material
+              );
+
+            return id !== null;
+          });
+
+        if (!belongsToApplication) {
+          finalMaterials = allMaterials;
+        }
+      }
+
+      setMaterials(finalMaterials);
+
+      // --------------------------------------------------------
+      // 4. LOAD ACADEMIC MATERIAL REVIEWS
+      // --------------------------------------------------------
+
+      const reviewsResponse =
+        await axios.get(
+          `${API_URL}/academic-material-reviews/`,
+          {
+            headers,
+          }
+        );
+
+      const allReviews =
+        unwrap(reviewsResponse.data);
+
+      console.log(
+        "Academic material reviews:",
+        allReviews
+      );
+
+      /*
+        Match using:
+
+        application_id
+        application.id
+        promotion_application_id
+        assignment_id
+        reviewer_id
+      */
+
+      const selectedReviewerId =
+        selectedAssignment.reviewer_id ||
+        selectedAssignment.reviewer?.id ||
+        selectedAssignment.reviewer ||
+        null;
+
+      const filteredReviews =
+        allReviews.filter((review) => {
+          const reviewAppId =
+            getReviewApplicationId(review);
+
+          const reviewAssignmentId =
+            getReviewAssignmentId(review);
+
+          const reviewReviewerId =
+            getReviewReviewerId(review);
+
+          // Best match: assignment
+          if (
+            reviewAssignmentId &&
+            sameId(
+              reviewAssignmentId,
+              assignmentId
+            )
+          ) {
+            return true;
+          }
+
+          // Application + reviewer
+          if (
+            reviewAppId &&
+            sameId(
+              reviewAppId,
+              applicationId
+            )
+          ) {
+            if (
+              !selectedReviewerId ||
+              !reviewReviewerId ||
+              sameId(
+                reviewReviewerId,
+                selectedReviewerId
+              )
+            ) {
+              return true;
+            }
+          }
+
+          return false;
+        });
+
+      console.log(
+        "Filtered academic material reviews:",
+        filteredReviews
+      );
+
+      /*
+        Existing review serializer may expose the material
+        but not application/assignment.
+
+        In that case, match through material IDs.
+      */
+
+      let finalReviews =
+        filteredReviews;
+
+      if (
+        finalReviews.length === 0 &&
+        finalMaterials.length > 0
+      ) {
+        finalReviews = allReviews.filter(
+          (review) => {
+            const reviewMaterialId =
+              getReviewMaterialId(
+                review
+              );
+
+            return finalMaterials.some(
+              (material) =>
+                sameId(
+                  getMaterialId(material),
+                  reviewMaterialId
+                )
+            );
+          }
+        );
+      }
+
+      setReviews(finalReviews);
+
+      // --------------------------------------------------------
+      // CREATE FORM VALUES
+      // --------------------------------------------------------
+
+      const formValues = {};
+
+      finalMaterials.forEach((material) => {
+        const materialId =
+          getMaterialId(material);
+
+        const existingReview =
+          finalReviews.find((review) =>
+            sameId(
+              getReviewMaterialId(review),
+              materialId
+            )
+          );
+
+        formValues[materialId] = {
+          authenticity:
+            existingReview?.authenticity || "",
+
+          originality:
+            existingReview?.originality || "",
+
+          contribution:
+            existingReview?.contribution ||
+            existingReview?.contribution_to_knowledge ||
+            "",
+
+          relevance:
+            existingReview?.relevance ||
+            existingReview?.relevance_to_discipline ||
+            "",
+
+          comments:
+            existingReview?.comments ||
+            existingReview?.comment ||
+            "",
+
+          grade:
+            existingReview?.grade ||
+            existingReview?.academic_grade ||
+            "",
+
+          recommendation:
+            existingReview?.recommendation ||
+            "",
+        };
+      });
+
+      setReviewForms(formValues);
+
+    } catch (err) {
+      console.error(
+        "Review page initialization failed:",
+        err
+      );
+
+      if (
+        err.response?.status === 401
+      ) {
+        localStorage.clear();
+        navigate("/login");
         return;
       }
 
-      try {
-        setLoading(true);
-        setError("");
-
-        const assignmentData =
-          await loadAssignment();
-
-        const applicationData =
-          extractApplication(
-            assignmentData
-          );
-
-        setApplication(applicationData);
-
-        await loadMaterials(applicationData);
-
-        await loadReviews();
-      } catch (error) {
-        console.error(
-          "Review page initialization failed:",
-          error
-        );
-
-        setError(
-          error.message ||
-            "Unable to load the assigned review."
-        );
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    initialize();
-  }, [token]);
-
-  // =====================================================================
-  // REVIEW MATCHING
-  // =====================================================================
-
-  const getReviewForMaterial = (materialId) => {
-    if (!materialId) {
-      return null;
+      setError(
+        err.response?.data?.detail ||
+        err.message ||
+        "Failed to load reviewer assessment."
+      );
+    } finally {
+      setLoading(false);
     }
+  };
 
+  // ============================================================
+  // APPLICATION INFORMATION
+  // ============================================================
+
+  const getApplicantName = () => {
     return (
-      reviews.find(
-        (review) =>
-          Number(review.material) ===
-            Number(materialId) ||
-          Number(review.material?.id) ===
-            Number(materialId)
-      ) || null
+      application?.employee_name ||
+      application?.applicant_name ||
+      application?.employee?.full_name ||
+      application?.employee?.name ||
+      application?.employee?.username ||
+      application?.user?.full_name ||
+      application?.user?.name ||
+      "N/A"
     );
   };
 
-  // =====================================================================
+  const getDepartment = () => {
+    return (
+      application?.department_name ||
+      application?.department?.name ||
+      application?.employee?.department_name ||
+      application?.employee?.department?.name ||
+      application?.employee?.department ||
+      "N/A"
+    );
+  };
+
+  const getCurrentRank = () => {
+    return (
+      application?.current_title_name ||
+      application?.current_title?.title_name ||
+      application?.current_title?.name ||
+      application?.current_title ||
+      application?.current_position ||
+      "N/A"
+    );
+  };
+
+  const getTargetRank = () => {
+    return (
+      application?.targeted_title_name ||
+      application?.targeted_title?.title_name ||
+      application?.targeted_title?.name ||
+      application?.targeted_title ||
+      application?.target_position ||
+      "N/A"
+    );
+  };
+
+  const getReviewerName = () => {
+    return (
+      assignment?.reviewer_name ||
+      assignment?.reviewer?.full_name ||
+      assignment?.reviewer?.name ||
+      assignment?.reviewer_full_name ||
+      "You"
+    );
+  };
+
+  // ============================================================
+  // ASSIGNMENT STATUS
+  // ============================================================
+
+  const getAssignmentStatus = () => {
+    if (!assignment) {
+      return "PENDING";
+    }
+
+    if (
+      assignment.completed === true
+    ) {
+      return "COMPLETED";
+    }
+
+    return (
+      assignment.review_status ||
+      assignment.status ||
+      "PENDING"
+    );
+  };
+
+  // ============================================================
+  // REVIEW LOOKUP
+  // ============================================================
+
+  const getReviewForMaterial = (
+    material
+  ) => {
+    const materialId =
+      getMaterialId(material);
+
+    return reviews.find((review) =>
+      sameId(
+        getReviewMaterialId(review),
+        materialId
+      )
+    );
+  };
+
+  // ============================================================
+  // UPDATE FORM
+  // ============================================================
+
+  const updateForm = (
+    materialId,
+    field,
+    value
+  ) => {
+    setReviewForms((previous) => ({
+      ...previous,
+
+      [materialId]: {
+        ...(previous[materialId] || {}),
+        [field]: value,
+      },
+    }));
+  };
+
+  // ============================================================
+  // STATUS
+  // ============================================================
+
+  const isReviewed = (material) => {
+    const review =
+      getReviewForMaterial(
+        material
+      );
+
+    if (review) {
+      return true;
+    }
+
+    const materialId =
+      getMaterialId(material);
+
+    const form =
+      reviewForms[materialId];
+
+    if (!form) {
+      return false;
+    }
+
+    return Boolean(
+      form.authenticity?.trim() ||
+      form.originality?.trim() ||
+      form.contribution?.trim() ||
+      form.relevance?.trim() ||
+      form.comments?.trim() ||
+      form.grade ||
+      form.recommendation
+    );
+  };
+
+  // ============================================================
   // PROGRESS
-  // =====================================================================
+  // ============================================================
 
-  const reviewedCount = materials.filter(
-    (material) =>
-      getReviewForMaterial(material.id)
-  ).length;
+  const reviewedCount =
+    materials.filter(isReviewed).length;
 
-  const totalMaterials = materials.length;
+  const totalMaterials =
+    materials.length;
 
-  const progressPercentage =
+  const progress =
     totalMaterials > 0
       ? Math.round(
-          (reviewedCount / totalMaterials) * 100
+          (reviewedCount /
+            totalMaterials) *
+            100
         )
       : 0;
 
@@ -495,1703 +864,1551 @@ function ReviewMaterial({ assignmentId: assignmentIdProp }) {
     totalMaterials > 0 &&
     reviewedCount === totalMaterials;
 
-  // =====================================================================
-  // MATERIAL TITLE
-  // =====================================================================
+  // ============================================================
+  // SUBMIT ONE MATERIAL
+  // ============================================================
 
-  const getMaterialTitle = (material) => {
-    return (
-      material.title ||
-      material.material_title ||
-      material.name ||
-      material.document_title ||
-      `Promotion Material #${material.id}`
-    );
-  };
-
-  // =====================================================================
-  // MATERIAL TYPE
-  // =====================================================================
-
-  const getMaterialType = (material) => {
-    return (
-      material.material_type ||
-      material.type ||
-      material.category ||
-      "Academic Material"
-    );
-  };
-
-  // =====================================================================
-  // MATERIAL FILE
-  // =====================================================================
-
-  const getMaterialFile = (material) => {
-    return (
-      material.pdf_file ||
-      material.file ||
-      material.document ||
-      material.file_url ||
-      material.pdf ||
-      null
-    );
-  };
-
-  // =====================================================================
-  // OPEN REVIEW
-  // =====================================================================
-
-  const openReview = (material) => {
-    setError("");
-    setSuccess("");
-
-    const existingReview =
-      getReviewForMaterial(material.id);
-
-    setSelectedMaterial(material);
-
-    if (existingReview) {
-      setReviewForm({
-        authenticity:
-          existingReview.authenticity || "",
-
-        originality:
-          existingReview.originality || "",
-
-        coverage_of_subject:
-          existingReview.coverage_of_subject || "",
-
-        contribution_to_knowledge:
-          existingReview.contribution_to_knowledge ||
-          "",
-
-        relevance_to_discipline:
-          existingReview.relevance_to_discipline ||
-          "",
-
-        presentation_quality:
-          existingReview.presentation_quality || "",
-
-        technical_recommendation:
-          existingReview.technical_recommendation ||
-          "",
-
-        grade:
-          existingReview.grade || "",
-
-        points:
-          existingReview.points ?? "",
-
-        overall_quality:
-          existingReview.overall_quality || "",
-
-        strengths:
-          existingReview.strengths || "",
-
-        shortcomings:
-          existingReview.shortcomings || "",
-
-        reviewer_name:
-          existingReview.reviewer_name ||
-          getName(assignment?.reviewer),
-
-        reviewer_academic_rank:
-          existingReview.reviewer_academic_rank ||
-          getRank(assignment?.reviewer),
-
-        reviewer_affiliation:
-          existingReview.reviewer_affiliation ||
-          "",
-
-        reviewer_signature_date:
-          existingReview.reviewer_signature_date ||
-          "",
-      });
-    } else {
-      setReviewForm({
-        ...initialReview,
-
-        reviewer_name:
-          getName(assignment?.reviewer),
-
-        reviewer_academic_rank:
-          getRank(assignment?.reviewer),
-      });
-    }
-
-    setShowReviewForm(true);
-
-    window.scrollTo({
-      top: 0,
-      behavior: "smooth",
-    });
-  };
-
-  // =====================================================================
-  // CLOSE REVIEW
-  // =====================================================================
-
-  const closeReview = () => {
-    setShowReviewForm(false);
-    setSelectedMaterial(null);
-    setError("");
-  };
-
-  // =====================================================================
-  // FORM CHANGE
-  // =====================================================================
-
-  const handleChange = (event) => {
-    const {
-      name,
-      value,
-    } = event.target;
-
-    setReviewForm((previous) => ({
-      ...previous,
-      [name]: value,
-    }));
-  };
-
-  // =====================================================================
-  // SUBMIT REVIEW
-  // =====================================================================
-
-  const handleSubmitReview = async (event) => {
-    event.preventDefault();
-
-    if (!selectedMaterial) {
-      setError(
-        "Please select an academic material to review."
-      );
-
-      return;
-    }
-
-    if (!assignment) {
-      setError(
-        "Reviewer assignment could not be identified."
-      );
-
-      return;
-    }
-
-    if (!assignment.reviewer) {
-      setError(
-        "Reviewer information is missing from this assignment."
-      );
-
-      return;
-    }
-
-    if (!reviewForm.grade) {
-      setError(
-        "Please select an academic grade."
-      );
-
-      return;
-    }
-
+  const submitMaterialReview = async (
+    material
+  ) => {
     try {
       setSubmitting(true);
       setError("");
       setSuccess("");
 
+      const materialId =
+        getMaterialId(material);
+
+      const form =
+        reviewForms[materialId] || {};
+
+      if (!materialId) {
+        throw new Error(
+          "Invalid academic material."
+        );
+      }
+
+      if (!form.authenticity?.trim()) {
+        throw new Error(
+          "Please provide an authenticity assessment."
+        );
+      }
+
+      if (!form.originality?.trim()) {
+        throw new Error(
+          "Please provide an originality assessment."
+        );
+      }
+
+      if (!form.contribution?.trim()) {
+        throw new Error(
+          "Please provide contribution to knowledge assessment."
+        );
+      }
+
+      if (!form.relevance?.trim()) {
+        throw new Error(
+          "Please provide relevance to the discipline assessment."
+        );
+      }
+
+      if (!form.grade) {
+        throw new Error(
+          "Please select an academic grade."
+        );
+      }
+
+      if (!form.comments?.trim()) {
+        throw new Error(
+          "Please provide reviewer comments."
+        );
+      }
+
       const existingReview =
         getReviewForMaterial(
-          selectedMaterial.id
+          material
         );
 
-      /*
-       * IMPORTANT:
-       *
-       * The backend AcademicMaterialReview model
-       * requires:
-       *
-       * material
-       * reviewer
-       *
-       * All other fields are entered by the reviewer.
-       */
-
       const payload = {
-        material: Number(
-          selectedMaterial.id
-        ),
+        application:
+          Number(applicationId),
 
-        reviewer: Number(
-          typeof assignment.reviewer ===
-            "object"
-            ? assignment.reviewer.id
-            : assignment.reviewer
-        ),
+        application_id:
+          Number(applicationId),
+
+        material:
+          Number(materialId),
+
+        material_id:
+          Number(materialId),
+
+        assignment:
+          Number(assignmentId),
+
+        assignment_id:
+          Number(assignmentId),
 
         authenticity:
-          reviewForm.authenticity,
+          form.authenticity,
 
         originality:
-          reviewForm.originality,
+          form.originality,
 
-        coverage_of_subject:
-          reviewForm.coverage_of_subject,
+        contribution:
+          form.contribution,
 
-        contribution_to_knowledge:
-          reviewForm.contribution_to_knowledge,
+        relevance:
+          form.relevance,
 
-        relevance_to_discipline:
-          reviewForm.relevance_to_discipline,
-
-        presentation_quality:
-          reviewForm.presentation_quality,
-
-        technical_recommendation:
-          reviewForm.technical_recommendation,
+        comments:
+          form.comments,
 
         grade:
-          reviewForm.grade,
+          form.grade,
 
-        points:
-          reviewForm.points
-            ? Number(reviewForm.points)
-            : 0,
-
-        overall_quality:
-          reviewForm.overall_quality,
-
-        strengths:
-          reviewForm.strengths,
-
-        shortcomings:
-          reviewForm.shortcomings,
-
-        reviewer_name:
-          reviewForm.reviewer_name,
-
-        reviewer_academic_rank:
-          reviewForm.reviewer_academic_rank,
-
-        reviewer_affiliation:
-          reviewForm.reviewer_affiliation,
-
-        reviewer_signature_date:
-          reviewForm.reviewer_signature_date ||
-          null,
+        recommendation:
+          form.recommendation ||
+          "RECOMMEND",
       };
 
       console.log(
-        "Academic material review payload:",
+        "Submitting academic material review:",
         payload
       );
 
       let response;
 
-      /*
-       * Existing review = UPDATE
-       * New review = CREATE
-       */
-
       if (existingReview?.id) {
-        response = await axios.put(
-          `${API_URL}/academic-material-reviews/${existingReview.id}/`,
-          payload,
-          { headers }
-        );
+        response =
+          await axios.patch(
+            `${API_URL}/academic-material-reviews/${existingReview.id}/`,
+            payload,
+            {
+              headers,
+            }
+          );
       } else {
-        response = await axios.post(
-          `${API_URL}/academic-material-reviews/`,
-          payload,
-          { headers }
-        );
+        response =
+          await axios.post(
+            `${API_URL}/academic-material-reviews/`,
+            payload,
+            {
+              headers,
+            }
+          );
       }
 
       console.log(
-        "Academic review saved:",
+        "Review saved:",
         response.data
       );
 
       setSuccess(
-        "Academic material review submitted successfully."
+        "Academic material review saved successfully."
       );
 
-      await loadReviews();
+      // Reload everything
+      await initialize();
 
-      /*
-       * Check whether all materials are now reviewed.
-       */
-
-      const refreshedReviews =
-        await axios.get(
-          `${API_URL}/academic-material-reviews/`,
-          { headers }
-        );
-
-      const refreshedReviewData =
-        normalizeArray(
-          refreshedReviews.data
-        );
-
-      setReviews(
-        refreshedReviewData
+    } catch (err) {
+      console.error(
+        "Failed to save review:",
+        err.response?.data || err
       );
 
-      const newReviewedCount =
-        materials.filter((material) =>
-          refreshedReviewData.some(
-            (review) =>
-              Number(review.material) ===
-              Number(material.id)
-          )
-        ).length;
+      const backendError =
+        err.response?.data;
 
-      /*
-       * If every material is reviewed,
-       * mark reviewer assignment completed.
-       */
+      let message =
+        "Failed to save academic material review.";
 
       if (
-        materials.length > 0 &&
-        newReviewedCount ===
-          materials.length
+        typeof backendError === "string"
       ) {
-        await completeAssignment();
+        message = backendError;
+      } else if (
+        backendError?.detail
+      ) {
+        message =
+          backendError.detail;
+      } else if (
+        backendError &&
+        typeof backendError === "object"
+      ) {
+        message = Object.entries(
+          backendError
+        )
+          .map(
+            ([field, value]) =>
+              `${field}: ${
+                Array.isArray(value)
+                  ? value.join(", ")
+                  : value
+              }`
+          )
+          .join(" | ");
+      } else if (err.message) {
+        message = err.message;
       }
 
-      setShowReviewForm(false);
-      setSelectedMaterial(null);
-
-      window.scrollTo({
-        top: 0,
-        behavior: "smooth",
-      });
-    } catch (error) {
-      console.error(
-        "Academic review submission failed:",
-        error
-      );
-
-      console.error(
-        "Backend response:",
-        error.response?.data
-      );
-
-      if (error.response?.data) {
-        const backendData =
-          error.response.data;
-
-        if (
-          typeof backendData ===
-          "object"
-        ) {
-          const messages =
-            Object.entries(
-              backendData
-            )
-              .map(
-                ([field, message]) =>
-                  `${field}: ${
-                    Array.isArray(message)
-                      ? message.join(", ")
-                      : message
-                  }`
-              )
-              .join(" | ");
-
-          setError(messages);
-        } else {
-          setError(
-            String(backendData)
-          );
-        }
-      } else {
-        setError(
-          "Failed to submit academic material review."
-        );
-      }
+      setError(message);
     } finally {
       setSubmitting(false);
     }
   };
 
-  // =====================================================================
-  // COMPLETE ASSIGNMENT
-  // =====================================================================
+  // ============================================================
+  // COMPLETE REVIEWER ASSIGNMENT
+  // ============================================================
 
-  const completeAssignment = async () => {
-    if (!assignment?.id) {
-      return;
-    }
+  const completeReviewerAssignment =
+    async () => {
+      try {
+        setSubmitting(true);
+        setError("");
+        setSuccess("");
 
-    try {
-      /*
-       * Your ReviewerAssignment model has:
-       *
-       * completed
-       * completed_at
-       *
-       * completed_at is read-only in serializer.
-       *
-       * Therefore only send completed=true.
-       */
+        if (!allMaterialsReviewed) {
+          throw new Error(
+            "You must review every submitted academic material before completing the reviewer assessment."
+          );
+        }
 
-      const response =
-        await axios.patch(
-          `${API_URL}/reviewer-assignments/${assignment.id}/`,
+        if (!assignmentId) {
+          throw new Error(
+            "Reviewer assignment ID is missing."
+          );
+        }
+
+        /*
+          First try the assignment endpoint.
+
+          This keeps the workflow controlled by Django.
+
+          Django should verify:
+
+          1. assignment belongs to current reviewer
+          2. application matches assignment
+          3. all materials have reviews
+          4. assignment is not already completed
+        */
+
+        const payload = {
+          completed: true,
+          review_status: "COMPLETED",
+          status: "COMPLETED",
+        };
+
+        console.log(
+          "Completing reviewer assignment:",
           {
-            completed: true,
-          },
-          { headers }
+            assignmentId,
+            payload,
+          }
         );
 
-      console.log(
-        "Reviewer assignment completed:",
-        response.data
-      );
+        const response =
+          await axios.patch(
+            `${API_URL}/reviewer-assignments/${assignmentId}/`,
+            payload,
+            {
+              headers,
+            }
+          );
 
-      setAssignment(
-        response.data
-      );
+        console.log(
+          "Reviewer assignment completed:",
+          response.data
+        );
 
-      setSuccess(
-        "All promotion materials have been reviewed. Your reviewer assignment is now COMPLETED."
-      );
-    } catch (error) {
-      console.error(
-        "Failed to complete reviewer assignment:",
-        error.response?.data || error
-      );
+        setSuccess(
+          "Reviewer assessment completed successfully."
+        );
 
-      /*
-       * Do not fail the submitted material review
-       * if assignment completion fails.
-       */
+        setAssignment(
+          response.data
+        );
 
-      setSuccess(
-        "All materials have been reviewed. The review was saved successfully."
-      );
-    }
+        /*
+          Refresh application too.
+
+          Django can now calculate whether:
+
+          reviewer = COMPLETED
+          AND
+          student = COMPLETED
+
+          If both are completed, the application
+          can move to Promotion Committee.
+        */
+
+        try {
+          const appResponse =
+            await axios.get(
+              `${API_URL}/applications/${applicationId}/`,
+              {
+                headers,
+              }
+            );
+
+          setApplication(
+            appResponse.data
+          );
+        } catch (refreshError) {
+          console.error(
+            "Failed to refresh application:",
+            refreshError
+          );
+        }
+
+      } catch (err) {
+        console.error(
+          "Failed to complete reviewer assignment:",
+          err.response?.data || err
+        );
+
+        const backendError =
+          err.response?.data;
+
+        let message =
+          "Failed to complete reviewer assessment.";
+
+        if (
+          backendError?.detail
+        ) {
+          message =
+            backendError.detail;
+        } else if (
+          backendError &&
+          typeof backendError === "object"
+        ) {
+          message = Object.entries(
+            backendError
+          )
+            .map(
+              ([field, value]) =>
+                `${field}: ${
+                  Array.isArray(value)
+                    ? value.join(", ")
+                    : value
+                }`
+            )
+            .join(" | ");
+        } else if (err.message) {
+          message = err.message;
+        }
+
+        setError(message);
+      } finally {
+        setSubmitting(false);
+      }
+    };
+
+  // ============================================================
+  // FORMAT MATERIAL NAME
+  // ============================================================
+
+  const getMaterialName = (
+    material
+  ) => {
+    return (
+      material.material_type_display ||
+      material.material_type_name ||
+      material.material_type ||
+      material.title ||
+      material.name ||
+      material.description ||
+      "Academic Material"
+    );
   };
 
-  // =====================================================================
-  // STATUS
-  // =====================================================================
+  // ============================================================
+  // DOCUMENT
+  // ============================================================
 
-  const assignmentCompleted =
-    Boolean(assignment?.completed) ||
-    allMaterialsReviewed;
+  const getDocumentUrl = (
+    document
+  ) => {
+    if (!document) {
+      return null;
+    }
 
-  // =====================================================================
+    if (
+      String(document).startsWith("http")
+    ) {
+      return document;
+    }
+
+    return `http://127.0.0.1:8000${document}`;
+  };
+
+  // ============================================================
+  // GRADE OPTIONS
+  // ============================================================
+
+  const gradeOptions = [
+    "A",
+    "B+",
+    "B",
+    "C+",
+    "C",
+    "D",
+    "F",
+  ];
+
+  // ============================================================
+  // RECOMMENDATION OPTIONS
+  // ============================================================
+
+  const recommendationOptions = [
+    "RECOMMEND",
+    "NOT_RECOMMEND",
+  ];
+
+  // ============================================================
   // LOADING
-  // =====================================================================
+  // ============================================================
 
   if (loading) {
     return (
       <div style={styles.page}>
-        <div style={styles.loadingCard}>
-          <div style={styles.spinner}>
-            ⟳
-          </div>
+        <div style={styles.loadingBox}>
+          <div style={styles.spinner}></div>
 
           <h2>
-            Loading Assigned Review
+            Academic Material Review
           </h2>
 
           <p>
-            Please wait while we retrieve
-            the promotion application and
-            academic materials.
+            Loading assigned promotion
+            application...
           </p>
         </div>
       </div>
     );
   }
 
-  // =====================================================================
-  // NO ASSIGNMENT
-  // =====================================================================
-
-  if (!assignment) {
-    return (
-      <div style={styles.page}>
-        <div style={styles.container}>
-          <div style={styles.errorCard}>
-            <h2>
-              Assigned Review Not Found
-            </h2>
-
-            <p>
-              {error ||
-                "No reviewer assignment could be found."}
-            </p>
-
-            <button
-              onClick={() =>
-                window.history.back()
-              }
-              style={styles.secondaryButton}
-            >
-              ← Assigned Reviews
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // =====================================================================
+  // ============================================================
   // PAGE
-  // =====================================================================
+  // ============================================================
 
   return (
     <div style={styles.page}>
-      <div style={styles.container}>
 
-        {/* ============================================================
-            HEADER
-        ============================================================ */}
+      {/* ======================================================
+          TOP NAVIGATION
+      ====================================================== */}
 
-        <div style={styles.topBar}>
-          <button
-            onClick={() =>
-              window.history.back()
-            }
-            style={styles.backButton}
-          >
-            ← Assigned Reviews
-          </button>
+      <div style={styles.topBar}>
+
+        <button
+          onClick={() =>
+            navigate(
+              "/reviewer/assigned-reviews"
+            )
+          }
+          style={styles.backButton}
+        >
+          ← Assigned Reviews
+        </button>
+
+        <button
+          onClick={() =>
+            navigate(
+              "/reviewer/dashboard"
+            )
+          }
+          style={styles.dashboardButton}
+        >
+          Dashboard
+        </button>
+
+      </div>
+
+      {/* ======================================================
+          HEADER
+      ====================================================== */}
+
+      <div style={styles.header}>
+
+        <div>
+
+          <div style={styles.formLabel}>
+            FORM C
+          </div>
+
+          <h1 style={styles.title}>
+            Academic Material Review
+          </h1>
+
+          <p style={styles.subtitle}>
+            Academic assessment of submitted
+            promotion materials.
+          </p>
+
+        </div>
+
+        <div style={styles.headerStatus}>
+
+          <span style={styles.statusCaption}>
+            REVIEWER STATUS
+          </span>
 
           <span
             style={
-              assignmentCompleted
+              getAssignmentStatus()
+                .toUpperCase()
+                .includes("COMPLETED")
                 ? styles.completedBadge
                 : styles.pendingBadge
             }
           >
-            {assignmentCompleted
-              ? "COMPLETED"
-              : "REVIEW IN PROGRESS"}
+            {getAssignmentStatus()}
           </span>
+
         </div>
 
-        <div style={styles.header}>
-          <div>
-            <h1 style={styles.title}>
-              Academic Material Review
-            </h1>
+      </div>
 
-            <p style={styles.subtitle}>
-              Form C — Academic assessment of
-              submitted promotion materials.
-            </p>
-          </div>
+      {/* ======================================================
+          ERROR
+      ====================================================== */}
+
+      {error && (
+        <div style={styles.errorBox}>
+
+          <strong>
+            Error
+          </strong>
+
+          <p>
+            {error}
+          </p>
+
+          <button
+            onClick={() =>
+              setError("")
+            }
+            style={styles.closeError}
+          >
+            ×
+          </button>
+
         </div>
+      )}
 
-        {/* ============================================================
-            ALERTS
-        ============================================================ */}
+      {/* ======================================================
+          SUCCESS
+      ====================================================== */}
 
-        {error && (
-          <div style={styles.error}>
-            <strong>Error</strong>
+      {success && (
+        <div style={styles.successBox}>
 
-            <div
-              style={{
-                marginTop: "6px",
-              }}
-            >
-              {error}
-            </div>
-          </div>
-        )}
+          <strong>
+            ✓ Success
+          </strong>
 
-        {success && (
-          <div style={styles.success}>
+          <span>
             {success}
-          </div>
-        )}
+          </span>
 
-        {/* ============================================================
-            APPLICANT INFORMATION
-        ============================================================ */}
+        </div>
+      )}
 
-        <div style={styles.card}>
+      {/* ======================================================
+          APPLICANT INFORMATION
+      ====================================================== */}
 
-          <div style={styles.cardHeader}>
-            <div>
-              <h2 style={styles.cardTitle}>
-                Applicant Information
-              </h2>
+      <div style={styles.card}>
 
-              <p style={styles.cardSubtitle}>
-                This information comes from
-                the assigned promotion
-                application.
-              </p>
-            </div>
+        <div style={styles.cardHeader}>
 
-            <span style={styles.applicationBadge}>
-              {getApplicationId(
-                application
-              )}
-            </span>
-          </div>
+          <div>
 
-          <div style={styles.infoGrid}>
+            <h2 style={styles.cardTitle}>
+              Applicant Information
+            </h2>
 
-            <InfoItem
-              label="Application ID"
-              value={getApplicationId(
-                application
-              )}
-            />
-
-            <InfoItem
-              label="Applicant"
-              value={getName(
-                application?.employee
-              )}
-            />
-
-            <InfoItem
-              label="Department"
-              value={getDepartmentName(
-                application?.employee
-                  ?.department ||
-                  application?.department
-              )}
-            />
-
-            <InfoItem
-              label="Current Rank"
-              value={
-                application?.current_rank ||
-                application?.employee
-                  ?.academic_rank ||
-                application?.employee
-                  ?.rank ||
-                "N/A"
-              }
-            />
-
-            <InfoItem
-              label="Promotion To"
-              value={
-                application?.promotion_to ||
-                application?.promoted_to ||
-                application?.target_rank ||
-                application?.applied_rank ||
-                "N/A"
-              }
-            />
-
-            <InfoItem
-              label="Reviewer"
-              value={getName(
-                assignment.reviewer
-              )}
-            />
-
-            <InfoItem
-              label="Reviewer Status"
-              value={
-                assignmentCompleted
-                  ? "COMPLETED"
-                  : "PENDING"
-              }
-            />
-
-            <InfoItem
-              label="Materials Reviewed"
-              value={`${reviewedCount} / ${totalMaterials}`}
-            />
+            <p style={styles.cardDescription}>
+              This information comes from the
+              assigned promotion application.
+            </p>
 
           </div>
+
         </div>
 
-        {/* ============================================================
-            REVIEW PROGRESS
-        ============================================================ */}
+        <div style={styles.infoGrid}>
 
-        <div style={styles.card}>
+          <InfoItem
+            label="Application ID"
+            value={`APP-${String(
+              applicationId
+            ).padStart(3, "0")}`}
+          />
 
-          <div style={styles.progressHeader}>
+          <InfoItem
+            label="Applicant"
+            value={getApplicantName()}
+          />
 
-            <div>
-              <h2 style={styles.cardTitle}>
-                Review Progress
-              </h2>
+          <InfoItem
+            label="Department"
+            value={getDepartment()}
+          />
 
-              <p style={styles.cardSubtitle}>
-                Review every promotion material
-                before the reviewer status
-                becomes COMPLETED.
-              </p>
-            </div>
+          <InfoItem
+            label="Current Rank"
+            value={getCurrentRank()}
+          />
 
-            <strong style={styles.progressNumber}>
-              {reviewedCount} /{" "}
-              {totalMaterials}
-            </strong>
-          </div>
+          <InfoItem
+            label="Promotion To"
+            value={getTargetRank()}
+          />
 
-          <div style={styles.progressBackground}>
-            <div
-              style={{
-                ...styles.progressBar,
-                width: `${progressPercentage}%`,
-              }}
-            />
-          </div>
+          <InfoItem
+            label="Reviewer"
+            value={getReviewerName()}
+          />
 
-          <div style={styles.progressFooter}>
-            <span>
-              {progressPercentage}% reviewed
-            </span>
-
-            <span>
-              {assignmentCompleted
-                ? "Review completed"
-                : "Review in progress"}
-            </span>
-          </div>
         </div>
 
-        {/* ============================================================
-            REVIEW FORM
-        ============================================================ */}
+      </div>
 
-        {showReviewForm &&
-          selectedMaterial && (
-            <div style={styles.card}>
+      {/* ======================================================
+          REVIEW PROGRESS
+      ====================================================== */}
 
-              <div style={styles.reviewFormHeader}>
+      <div style={styles.progressCard}>
 
-                <div>
-                  <span
-                    style={styles.materialLabel}
-                  >
-                    REVIEWING MATERIAL
-                  </span>
+        <div style={styles.progressHeader}>
 
-                  <h2
-                    style={{
-                      margin:
-                        "5px 0 0",
-                    }}
-                  >
-                    {getMaterialTitle(
-                      selectedMaterial
-                    )}
-                  </h2>
+          <div>
 
-                  <p
-                    style={
-                      styles.cardSubtitle
-                    }
-                  >
-                    {getMaterialType(
-                      selectedMaterial
-                    )}
-                  </p>
-                </div>
+            <h2 style={styles.cardTitle}>
+              Review Progress
+            </h2>
 
-                <button
-                  type="button"
-                  onClick={closeReview}
-                  style={
-                    styles.secondaryButton
-                  }
-                >
-                  Cancel
-                </button>
-              </div>
+            <p style={styles.cardDescription}>
+              Review every promotion material
+              before the reviewer status becomes
+              COMPLETED.
+            </p>
 
-              {/* MATERIAL INFORMATION */}
+          </div>
 
-              <div
-                style={
-                  styles.materialInformation
-                }
-              >
-                <strong>
-                  Material:
-                </strong>
+          <strong
+            style={styles.progressPercentage}
+          >
+            {progress}%
+          </strong>
 
-                <span>
-                  {getMaterialTitle(
-                    selectedMaterial
-                  )}
-                </span>
+        </div>
 
-                {getMaterialFile(
-                  selectedMaterial
-                ) && (
-                  <a
-                    href={getMaterialFile(
-                      selectedMaterial
-                    )}
-                    target="_blank"
-                    rel="noreferrer"
-                    style={styles.fileLink}
-                  >
-                    View / Download Material
-                  </a>
-                )}
-              </div>
+        <div style={styles.progressBarBackground}>
 
-              <form
-                onSubmit={
-                  handleSubmitReview
-                }
-              >
+          <div
+            style={{
+              ...styles.progressBar,
+              width: `${progress}%`,
+            }}
+          />
 
-                {/* ==================================================
-                    ACADEMIC ASSESSMENT
-                ================================================== */}
+        </div>
 
-                <div style={styles.section}>
+        <div style={styles.progressFooter}>
 
-                  <h3
-                    style={
-                      styles.sectionTitle
-                    }
-                  >
-                    1. Academic Assessment
-                  </h3>
+          <span>
+            {reviewedCount} /{" "}
+            {totalMaterials} reviewed
+          </span>
 
-                  <ReviewTextarea
-                    name="authenticity"
-                    label="Authenticity"
-                    value={
-                      reviewForm.authenticity
-                    }
-                    onChange={
-                      handleChange
-                    }
-                    placeholder="Assess whether the material appears authentic and genuinely produced by the applicant."
-                    required
-                  />
+          <span
+            style={
+              allMaterialsReviewed
+                ? styles.progressComplete
+                : styles.progressPending
+            }
+          >
+            {allMaterialsReviewed
+              ? "✓ Review completed"
+              : "Review in progress"}
+          </span>
 
-                  <ReviewTextarea
-                    name="originality"
-                    label="Originality"
-                    value={
-                      reviewForm.originality
-                    }
-                    onChange={
-                      handleChange
-                    }
-                    placeholder="Assess the originality and uniqueness of the material."
-                    required
-                  />
+        </div>
 
-                  <ReviewTextarea
-                    name="coverage_of_subject"
-                    label="Coverage of Subject"
-                    value={
-                      reviewForm.coverage_of_subject
-                    }
-                    onChange={
-                      handleChange
-                    }
-                    placeholder="Comment on the depth and breadth of subject coverage."
-                    required
-                  />
+      </div>
 
-                  <ReviewTextarea
-                    name="contribution_to_knowledge"
-                    label="Contribution to Knowledge"
-                    value={
-                      reviewForm.contribution_to_knowledge
-                    }
-                    onChange={
-                      handleChange
-                    }
-                    placeholder="Explain the material's contribution to knowledge."
-                    required
-                  />
+      {/* ======================================================
+          MATERIALS
+      ====================================================== */}
 
-                  <ReviewTextarea
-                    name="relevance_to_discipline"
-                    label="Relevance to Discipline"
-                    value={
-                      reviewForm.relevance_to_discipline
-                    }
-                    onChange={
-                      handleChange
-                    }
-                    placeholder="Assess relevance to the applicant's academic discipline."
-                    required
-                  />
+      <div style={styles.card}>
 
-                  <ReviewTextarea
-                    name="presentation_quality"
-                    label="Presentation Quality"
-                    value={
-                      reviewForm.presentation_quality
-                    }
-                    onChange={
-                      handleChange
-                    }
-                    placeholder="Assess organization, clarity, academic presentation and quality."
-                    required
-                  />
+        <div style={styles.cardHeader}>
 
-                  <ReviewTextarea
-                    name="technical_recommendation"
-                    label="Technical Recommendation"
-                    value={
-                      reviewForm.technical_recommendation
-                    }
-                    onChange={
-                      handleChange
-                    }
-                    placeholder="Provide your technical recommendation regarding this material."
-                    required
-                  />
+          <div>
 
-                </div>
+            <h2 style={styles.cardTitle}>
+              Promotion Materials
+            </h2>
 
-                {/* ==================================================
-                    GRADE
-                ================================================== */}
+            <p style={styles.cardDescription}>
+              Review each submitted material
+              individually.
+            </p>
 
-                <div style={styles.section}>
+          </div>
 
-                  <h3
-                    style={
-                      styles.sectionTitle
-                    }
-                  >
-                    2. Academic Grade
-                  </h3>
+          <div style={styles.materialCounter}>
+            {reviewedCount} /{" "}
+            {totalMaterials} reviewed
+          </div>
 
-                  <div style={styles.twoColumn}>
+        </div>
 
-                    <div
-                      style={
-                        styles.formGroup
-                      }
-                    >
-                      <label
-                        style={
-                          styles.label
-                        }
-                      >
-                        Academic Grade *
-                      </label>
+        {materials.length === 0 ? (
 
-                      <select
-                        name="grade"
-                        value={
-                          reviewForm.grade
-                        }
-                        onChange={
-                          handleChange
-                        }
-                        style={
-                          styles.input
-                        }
-                        required
-                      >
-                        <option value="">
-                          Select Grade
-                        </option>
+          <div style={styles.emptyBox}>
 
-                        <option value="A">
-                          A - Excellent
-                        </option>
-
-                        <option value="B">
-                          B - Very Good
-                        </option>
-
-                        <option value="C">
-                          C - Good
-                        </option>
-
-                        <option value="D">
-                          D - Poor
-                        </option>
-                      </select>
-                    </div>
-
-                    <div
-                      style={
-                        styles.formGroup
-                      }
-                    >
-                      <label
-                        style={
-                          styles.label
-                        }
-                      >
-                        Points
-                      </label>
-
-                      <input
-                        type="number"
-                        name="points"
-                        value={
-                          reviewForm.points
-                        }
-                        onChange={
-                          handleChange
-                        }
-                        style={
-                          styles.input
-                        }
-                        min="0"
-                        step="0.01"
-                        placeholder="Enter points"
-                      />
-
-                      <small
-                        style={
-                          styles.help
-                        }
-                      >
-                        Enter the points according
-                        to your institution's
-                        approved assessment scale.
-                      </small>
-                    </div>
-
-                  </div>
-
-                </div>
-
-                {/* ==================================================
-                    OVERALL QUALITY
-                ================================================== */}
-
-                <div style={styles.section}>
-
-                  <h3
-                    style={
-                      styles.sectionTitle
-                    }
-                  >
-                    3. Overall Assessment
-                  </h3>
-
-                  <ReviewTextarea
-                    name="overall_quality"
-                    label="Overall Quality"
-                    value={
-                      reviewForm.overall_quality
-                    }
-                    onChange={
-                      handleChange
-                    }
-                    placeholder="Give your overall assessment of the material."
-                    required
-                  />
-
-                  <ReviewTextarea
-                    name="strengths"
-                    label="Strengths"
-                    value={
-                      reviewForm.strengths
-                    }
-                    onChange={
-                      handleChange
-                    }
-                    placeholder="Identify the major strengths of the material."
-                  />
-
-                  <ReviewTextarea
-                    name="shortcomings"
-                    label="Shortcomings"
-                    value={
-                      reviewForm.shortcomings
-                    }
-                    onChange={
-                      handleChange
-                    }
-                    placeholder="Identify weaknesses or areas requiring improvement."
-                  />
-
-                </div>
-
-                {/* ==================================================
-                    REVIEWER INFORMATION
-                ================================================== */}
-
-                <div style={styles.section}>
-
-                  <h3
-                    style={
-                      styles.sectionTitle
-                    }
-                  >
-                    4. Reviewer Information
-                  </h3>
-
-                  <div style={styles.twoColumn}>
-
-                    <div
-                      style={
-                        styles.formGroup
-                      }
-                    >
-                      <label
-                        style={
-                          styles.label
-                        }
-                      >
-                        Reviewer Name
-                      </label>
-
-                      <input
-                        name="reviewer_name"
-                        value={
-                          reviewForm.reviewer_name
-                        }
-                        onChange={
-                          handleChange
-                        }
-                        style={
-                          styles.input
-                        }
-                      />
-                    </div>
-
-                    <div
-                      style={
-                        styles.formGroup
-                      }
-                    >
-                      <label
-                        style={
-                          styles.label
-                        }
-                      >
-                        Academic Rank
-                      </label>
-
-                      <input
-                        name="reviewer_academic_rank"
-                        value={
-                          reviewForm.reviewer_academic_rank
-                        }
-                        onChange={
-                          handleChange
-                        }
-                        style={
-                          styles.input
-                        }
-                      />
-                    </div>
-
-                    <div
-                      style={
-                        styles.formGroup
-                      }
-                    >
-                      <label
-                        style={
-                          styles.label
-                        }
-                      >
-                        Affiliation
-                      </label>
-
-                      <input
-                        name="reviewer_affiliation"
-                        value={
-                          reviewForm.reviewer_affiliation
-                        }
-                        onChange={
-                          handleChange
-                        }
-                        style={
-                          styles.input
-                        }
-                        placeholder="University / Institution"
-                      />
-                    </div>
-
-                    <div
-                      style={
-                        styles.formGroup
-                      }
-                    >
-                      <label
-                        style={
-                          styles.label
-                        }
-                      >
-                        Signature Date
-                      </label>
-
-                      <input
-                        type="date"
-                        name="reviewer_signature_date"
-                        value={
-                          reviewForm.reviewer_signature_date
-                        }
-                        onChange={
-                          handleChange
-                        }
-                        style={
-                          styles.input
-                        }
-                      />
-                    </div>
-
-                  </div>
-                </div>
-
-                {/* ==================================================
-                    SUBMIT
-                ================================================== */}
-
-                <div
-                  style={
-                    styles.submitArea
-                  }
-                >
-
-                  <button
-                    type="button"
-                    onClick={closeReview}
-                    style={
-                      styles.secondaryButton
-                    }
-                  >
-                    Cancel
-                  </button>
-
-                  <button
-                    type="submit"
-                    disabled={submitting}
-                    style={
-                      submitting
-                        ? styles.disabledButton
-                        : styles.primaryButton
-                    }
-                  >
-                    {submitting
-                      ? "Saving Review..."
-                      : getReviewForMaterial(
-                            selectedMaterial.id
-                          )
-                        ? "Update Review"
-                        : "Submit Academic Review"}
-                  </button>
-
-                </div>
-
-              </form>
+            <div style={styles.emptyIcon}>
+              📄
             </div>
-          )}
 
-        {/* ============================================================
-            MATERIALS
-        ============================================================ */}
+            <h3>
+              No Promotion Materials
+            </h3>
 
-        {!showReviewForm && (
-          <div style={styles.card}>
+            <p>
+              No promotion materials have
+              been submitted for this
+              application.
+            </p>
 
-            <div style={styles.cardHeader}>
+            <div style={styles.debugBox}>
 
-              <div>
-                <h2 style={styles.cardTitle}>
-                  Promotion Materials
-                </h2>
+              <strong>
+                Application:
+              </strong>{" "}
+              {applicationId}
 
-                <p
-                  style={
-                    styles.cardSubtitle
-                  }
-                >
-                  Review each submitted material
-                  individually.
-                </p>
-              </div>
+              <br />
 
-              <span
-                style={
-                  styles.materialCount
-                }
-              >
-                {reviewedCount} /{" "}
-                {totalMaterials} reviewed
-              </span>
+              <strong>
+                Assignment:
+              </strong>{" "}
+              {assignmentId}
 
             </div>
 
-            {materials.length === 0 ? (
-              <div style={styles.empty}>
+          </div>
 
-                <div
-                  style={
-                    styles.emptyIcon
-                  }
-                >
-                  📄
-                </div>
+        ) : (
 
-                <h3>
-                  No Promotion Materials
-                </h3>
+          <div style={styles.materialList}>
 
-                <p>
-                  No promotion materials have
-                  been submitted for this
-                  application.
-                </p>
+            {materials.map(
+              (material, index) => {
 
-              </div>
-            ) : (
-              <div
-                style={
-                  styles.materialList
-                }
-              >
+                const materialId =
+                  getMaterialId(
+                    material
+                  );
 
-                {materials.map(
-                  (material, index) => {
-                    const review =
-                      getReviewForMaterial(
-                        material.id
-                      );
+                const existingReview =
+                  getReviewForMaterial(
+                    material
+                  );
 
-                    const isReviewed =
-                      Boolean(review);
+                const form =
+                  reviewForms[
+                    materialId
+                  ] || {};
 
-                    return (
-                      <div
-                        key={
-                          material.id ||
-                          index
-                        }
-                        style={
-                          styles.materialCard
-                        }
-                      >
+                const reviewed =
+                  Boolean(
+                    existingReview
+                  );
 
-                        <div
+                return (
+                  <div
+                    key={
+                      materialId ||
+                      index
+                    }
+                    style={
+                      reviewed
+                        ? styles.materialCardReviewed
+                        : styles.materialCard
+                    }
+                  >
+
+                    {/* MATERIAL HEADER */}
+
+                    <div style={styles.materialHeader}>
+
+                      <div>
+
+                        <span
                           style={
                             styles.materialNumber
                           }
                         >
+                          MATERIAL{" "}
                           {index + 1}
+                        </span>
+
+                        <h3
+                          style={
+                            styles.materialTitle
+                          }
+                        >
+                          {getMaterialName(
+                            material
+                          )}
+                        </h3>
+
+                      </div>
+
+                      <span
+                        style={
+                          reviewed
+                            ? styles.reviewedBadge
+                            : styles.notReviewedBadge
+                        }
+                      >
+                        {reviewed
+                          ? "✓ REVIEWED"
+                          : "NOT REVIEWED"}
+                      </span>
+
+                    </div>
+
+                    {/* MATERIAL DETAILS */}
+
+                    <div
+                      style={
+                        styles.materialDetails
+                      }
+                    >
+
+                      <div>
+
+                        <span
+                          style={
+                            styles.detailLabel
+                          }
+                        >
+                          Points
+                        </span>
+
+                        <strong>
+                          {material.points ??
+                            material.score ??
+                            "0"}
+                        </strong>
+
+                      </div>
+
+                      <div>
+
+                        <span
+                          style={
+                            styles.detailLabel
+                          }
+                        >
+                          Submitted
+                        </span>
+
+                        <strong>
+                          {material.created_at
+                            ? new Date(
+                                material.created_at
+                              ).toLocaleDateString(
+                                "en-GB"
+                              )
+                            : "N/A"}
+                        </strong>
+
+                      </div>
+
+                      <div>
+
+                        <span
+                          style={
+                            styles.detailLabel
+                          }
+                        >
+                          Material ID
+                        </span>
+
+                        <strong>
+                          {materialId}
+                        </strong>
+
+                      </div>
+
+                    </div>
+
+                    {/* DOCUMENT */}
+
+                    <div style={styles.documentBox}>
+
+                      {material.document ||
+                      material.file ||
+                      material.document_url ? (
+
+                        <a
+                          href={getDocumentUrl(
+                            material.document ||
+                              material.file ||
+                              material.document_url
+                          )}
+                          target="_blank"
+                          rel="noreferrer"
+                          style={
+                            styles.documentButton
+                          }
+                        >
+                          📄 View Supporting
+                          Document
+                        </a>
+
+                      ) : (
+
+                        <span
+                          style={
+                            styles.noDocument
+                          }
+                        >
+                          No supporting document
+                          attached.
+                        </span>
+
+                      )}
+
+                    </div>
+
+                    {/* REVIEW FORM */}
+
+                    <div
+                      style={
+                        styles.reviewForm
+                      }
+                    >
+
+                      <h4
+                        style={
+                          styles.reviewFormTitle
+                        }
+                      >
+                        Academic Assessment
+                      </h4>
+
+                      {/* AUTHENTICITY */}
+
+                      <div
+                        style={
+                          styles.field
+                        }
+                      >
+
+                        <label
+                          style={
+                            styles.label
+                          }
+                        >
+                          1. Authenticity
+                          <span>
+                            *
+                          </span>
+                        </label>
+
+                        <textarea
+                          value={
+                            form.authenticity ||
+                            ""
+                          }
+                          onChange={(e) =>
+                            updateForm(
+                              materialId,
+                              "authenticity",
+                              e.target.value
+                            )
+                          }
+                          placeholder="Assess the authenticity of this material..."
+                          style={
+                            styles.textarea
+                          }
+                          rows={3}
+                        />
+
+                      </div>
+
+                      {/* ORIGINALITY */}
+
+                      <div
+                        style={
+                          styles.field
+                        }
+                      >
+
+                        <label
+                          style={
+                            styles.label
+                          }
+                        >
+                          2. Originality
+                          <span>
+                            *
+                          </span>
+                        </label>
+
+                        <textarea
+                          value={
+                            form.originality ||
+                            ""
+                          }
+                          onChange={(e) =>
+                            updateForm(
+                              materialId,
+                              "originality",
+                              e.target.value
+                            )
+                          }
+                          placeholder="Assess originality and uniqueness..."
+                          style={
+                            styles.textarea
+                          }
+                          rows={3}
+                        />
+
+                      </div>
+
+                      {/* CONTRIBUTION */}
+
+                      <div
+                        style={
+                          styles.field
+                        }
+                      >
+
+                        <label
+                          style={
+                            styles.label
+                          }
+                        >
+                          3. Contribution to
+                          Knowledge
+                          <span>
+                            *
+                          </span>
+                        </label>
+
+                        <textarea
+                          value={
+                            form.contribution ||
+                            ""
+                          }
+                          onChange={(e) =>
+                            updateForm(
+                              materialId,
+                              "contribution",
+                              e.target.value
+                            )
+                          }
+                          placeholder="Assess the contribution of this work to knowledge..."
+                          style={
+                            styles.textarea
+                          }
+                          rows={3}
+                        />
+
+                      </div>
+
+                      {/* RELEVANCE */}
+
+                      <div
+                        style={
+                          styles.field
+                        }
+                      >
+
+                        <label
+                          style={
+                            styles.label
+                          }
+                        >
+                          4. Relevance to
+                          Discipline
+                          <span>
+                            *
+                          </span>
+                        </label>
+
+                        <textarea
+                          value={
+                            form.relevance ||
+                            ""
+                          }
+                          onChange={(e) =>
+                            updateForm(
+                              materialId,
+                              "relevance",
+                              e.target.value
+                            )
+                          }
+                          placeholder="Assess relevance to the applicant's discipline..."
+                          style={
+                            styles.textarea
+                          }
+                          rows={3}
+                        />
+
+                      </div>
+
+                      {/* GRADE */}
+
+                      <div
+                        style={
+                          styles.twoColumns
+                        }
+                      >
+
+                        <div
+                          style={
+                            styles.field
+                          }
+                        >
+
+                          <label
+                            style={
+                              styles.label
+                            }
+                          >
+                            Academic Grade
+                            <span>
+                              *
+                            </span>
+                          </label>
+
+                          <select
+                            value={
+                              form.grade ||
+                              ""
+                            }
+                            onChange={(e) =>
+                              updateForm(
+                                materialId,
+                                "grade",
+                                e.target.value
+                              )
+                            }
+                            style={
+                              styles.select
+                            }
+                          >
+
+                            <option value="">
+                              Select grade
+                            </option>
+
+                            {gradeOptions.map(
+                              (grade) => (
+                                <option
+                                  key={
+                                    grade
+                                  }
+                                  value={
+                                    grade
+                                  }
+                                >
+                                  {grade}
+                                </option>
+                              )
+                            )}
+
+                          </select>
+
                         </div>
 
                         <div
                           style={
-                            styles.materialContent
+                            styles.field
                           }
                         >
 
-                          <div
+                          <label
                             style={
-                              styles.materialTop
+                              styles.label
+                            }
+                          >
+                            Recommendation
+                          </label>
+
+                          <select
+                            value={
+                              form.recommendation ||
+                              ""
+                            }
+                            onChange={(e) =>
+                              updateForm(
+                                materialId,
+                                "recommendation",
+                                e.target.value
+                              )
+                            }
+                            style={
+                              styles.select
                             }
                           >
 
-                            <div>
-                              <h3
-                                style={
-                                  styles.materialTitle
-                                }
-                              >
-                                {getMaterialTitle(
-                                  material
-                                )}
-                              </h3>
+                            <option value="">
+                              Select recommendation
+                            </option>
 
-                              <p
-                                style={
-                                  styles.materialType
-                                }
-                              >
-                                {getMaterialType(
-                                  material
-                                )}
-                              </p>
-                            </div>
-
-                            <span
-                              style={
-                                isReviewed
-                                  ? styles.reviewedBadge
-                                  : styles.notReviewedBadge
-                              }
-                            >
-                              {isReviewed
-                                ? "REVIEWED"
-                                : "PENDING"}
-                            </span>
-
-                          </div>
-
-                          {material.description && (
-                            <p
-                              style={
-                                styles.materialDescription
-                              }
-                            >
-                              {
-                                material.description
-                              }
-                            </p>
-                          )}
-
-                          {isReviewed && (
-                            <div
-                              style={
-                                styles.reviewSummary
-                              }
-                            >
-                              <span>
-                                Grade:{" "}
-                                <strong>
-                                  {
-                                    review.grade
+                            {recommendationOptions.map(
+                              (option) => (
+                                <option
+                                  key={
+                                    option
                                   }
-                                </strong>
-                              </span>
-
-                              <span>
-                                Points:{" "}
-                                <strong>
-                                  {
-                                    review.points ??
-                                    0
-                                  }
-                                </strong>
-                              </span>
-                            </div>
-                          )}
-
-                          <div
-                            style={
-                              styles.materialActions
-                            }
-                          >
-
-                            {getMaterialFile(
-                              material
-                            ) && (
-                              <a
-                                href={getMaterialFile(
-                                  material
-                                )}
-                                target="_blank"
-                                rel="noreferrer"
-                                style={
-                                  styles.viewButton
-                                }
-                              >
-                                View Material
-                              </a>
-                            )}
-
-                            {!assignmentCompleted && (
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  openReview(
-                                    material
-                                  )
-                                }
-                                style={
-                                  isReviewed
-                                    ? styles.editButton
-                                    : styles.primaryButton
-                                }
-                              >
-                                {isReviewed
-                                  ? "Edit Review"
-                                  : "Review Material"}
-                              </button>
-                            )}
-
-                            {assignmentCompleted &&
-                              isReviewed && (
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    openReview(
-                                      material
-                                    )
-                                  }
-                                  style={
-                                    styles.viewReviewButton
+                                  value={
+                                    option
                                   }
                                 >
-                                  View Review
-                                </button>
-                              )}
+                                  {option.replace(
+                                    "_",
+                                    " "
+                                  )}
+                                </option>
+                              )
+                            )}
 
-                          </div>
+                          </select>
 
                         </div>
+
                       </div>
-                    );
-                  }
-                )}
 
-              </div>
-            )}
-          </div>
-        )}
+                      {/* COMMENTS */}
 
-        {/* ============================================================
-            GUIDANCE
-        ============================================================ */}
+                      <div
+                        style={
+                          styles.field
+                        }
+                      >
 
-        {!showReviewForm && (
-          <div style={styles.guidance}>
+                        <label
+                          style={
+                            styles.label
+                          }
+                        >
+                          Reviewer Comments
+                          <span>
+                            *
+                          </span>
+                        </label>
 
-            <h3
-              style={
-                styles.guidanceTitle
+                        <textarea
+                          value={
+                            form.comments ||
+                            ""
+                          }
+                          onChange={(e) =>
+                            updateForm(
+                              materialId,
+                              "comments",
+                              e.target.value
+                            )
+                          }
+                          placeholder="Provide objective, evidence-based comments..."
+                          style={
+                            styles.textarea
+                          }
+                          rows={4}
+                        />
+
+                      </div>
+
+                      {/* SAVE */}
+
+                      <div
+                        style={
+                          styles.formActions
+                        }
+                      >
+
+                        <button
+                          disabled={
+                            submitting
+                          }
+                          onClick={() =>
+                            submitMaterialReview(
+                              material
+                            )
+                          }
+                          style={
+                            styles.saveButton
+                          }
+                        >
+                          {submitting
+                            ? "Saving..."
+                            : reviewed
+                            ? "Update Review"
+                            : "Save Material Review"}
+                        </button>
+
+                      </div>
+
+                    </div>
+
+                  </div>
+                );
               }
-            >
-              Reviewer Guidance
-            </h3>
-
-            <ul>
-              <li>
-                Review every submitted
-                academic material carefully.
-              </li>
-
-              <li>
-                Assess authenticity and
-                originality.
-              </li>
-
-              <li>
-                Consider the material's
-                contribution to knowledge.
-              </li>
-
-              <li>
-                Consider its relevance to
-                the applicant's discipline.
-              </li>
-
-              <li>
-                Provide objective and
-                evidence-based comments.
-              </li>
-
-              <li>
-                Select the appropriate
-                academic grade.
-              </li>
-
-              <li>
-                Reviewer status becomes
-                COMPLETED only after all
-                materials are reviewed.
-              </li>
-            </ul>
+            )}
 
           </div>
         )}
 
       </div>
+
+      {/* ======================================================
+          COMPLETE REVIEWER ASSESSMENT
+      ====================================================== */}
+
+      <div
+        style={
+          allMaterialsReviewed
+            ? styles.completeCard
+            : styles.completeCardDisabled
+        }
+      >
+
+        <div>
+
+          <h2
+            style={
+              styles.completeTitle
+            }
+          >
+            Complete Reviewer Assessment
+          </h2>
+
+          <p
+            style={
+              styles.completeDescription
+            }
+          >
+            {allMaterialsReviewed
+              ? "All submitted academic materials have been reviewed. You can now complete this reviewer assignment."
+              : `You can complete this reviewer assignment only after every submitted academic material has been reviewed. ${reviewedCount} of ${totalMaterials} materials are currently reviewed.`}
+          </p>
+
+        </div>
+
+        <button
+          disabled={
+            !allMaterialsReviewed ||
+            submitting ||
+            getAssignmentStatus()
+              .toUpperCase()
+              .includes("COMPLETED")
+          }
+          onClick={
+            completeReviewerAssignment
+          }
+          style={
+            allMaterialsReviewed
+              ? styles.completeButton
+              : styles.completeButtonDisabled
+          }
+        >
+          {getAssignmentStatus()
+            .toUpperCase()
+            .includes("COMPLETED")
+            ? "✓ Reviewer Completed"
+            : submitting
+            ? "Completing..."
+            : "Complete Reviewer Assessment"}
+        </button>
+
+      </div>
+
+      {/* ======================================================
+          WORKFLOW INFORMATION
+      ====================================================== */}
+
+      <div style={styles.workflowCard}>
+
+        <h3 style={styles.workflowTitle}>
+          Promotion Workflow
+        </h3>
+
+        <div style={styles.workflow}>
+
+          <WorkflowStep
+            number="1"
+            title="HOD"
+            text="Departmental review"
+          />
+
+          <WorkflowArrow />
+
+          <WorkflowStep
+            number="2"
+            title="Dean"
+            text="College review"
+          />
+
+          <WorkflowArrow />
+
+          <WorkflowStep
+            number="3"
+            title="Reviewer"
+            text="Academic assessment"
+            active
+          />
+
+          <WorkflowArrow />
+
+          <WorkflowStep
+            number="4"
+            title="Student Evaluation"
+            text="Teaching evaluation"
+          />
+
+          <WorkflowArrow />
+
+          <WorkflowStep
+            number="5"
+            title="Committee"
+            text="Committee recommendation"
+          />
+
+          <WorkflowArrow />
+
+          <WorkflowStep
+            number="6"
+            title="Final Decision"
+            text="Promotion decision"
+          />
+
+        </div>
+
+        <p style={styles.workflowNote}>
+          After the reviewer and student evaluation
+          stages are both completed, Django should
+          automatically make the application eligible
+          for Promotion Committee review. The Committee
+          then provides its recommendation, followed by
+          the final promotion decision.
+        </p>
+
+      </div>
+
     </div>
   );
 }
 
-// ========================================================================
+// ============================================================
 // INFO ITEM
-// ========================================================================
+// ============================================================
 
-function InfoItem({ label, value }) {
+function InfoItem({
+  label,
+  value,
+}) {
   return (
     <div style={styles.infoItem}>
+
       <span style={styles.infoLabel}>
         {label}
       </span>
 
       <strong style={styles.infoValue}>
-        {value || "N/A"}
+        {value}
       </strong>
+
     </div>
   );
 }
 
-// ========================================================================
-// REVIEW TEXTAREA
-// ========================================================================
+// ============================================================
+// WORKFLOW STEP
+// ============================================================
 
-function ReviewTextarea({
-  name,
-  label,
-  value,
-  onChange,
-  placeholder,
-  required = false,
+function WorkflowStep({
+  number,
+  title,
+  text,
+  active,
 }) {
   return (
-    <div style={styles.formGroup}>
-      <label style={styles.label}>
-        {label}
-        {required && (
-          <span style={styles.required}>
-            {" "}*
-          </span>
-        )}
-      </label>
+    <div
+      style={
+        active
+          ? styles.workflowStepActive
+          : styles.workflowStep
+      }
+    >
 
-      <textarea
-        name={name}
-        value={value}
-        onChange={onChange}
-        rows={5}
-        style={styles.textarea}
-        placeholder={placeholder}
-        required={required}
-      />
+      <div
+        style={
+          active
+            ? styles.workflowCircleActive
+            : styles.workflowCircle
+        }
+      >
+        {number}
+      </div>
+
+      <strong>
+        {title}
+      </strong>
+
+      <small>
+        {text}
+      </small>
+
     </div>
   );
 }
 
-// ========================================================================
+// ============================================================
+// WORKFLOW ARROW
+// ============================================================
+
+function WorkflowArrow() {
+  return (
+    <div style={styles.workflowArrow}>
+      →
+    </div>
+  );
+}
+
+// ============================================================
 // STYLES
-// ========================================================================
+// ============================================================
 
 const styles = {
+
   page: {
     minHeight: "100vh",
     background: "#f8fafc",
-    padding: "30px",
-    boxSizing: "border-box",
-  },
-
-  container: {
-    maxWidth: "1250px",
-    margin: "0 auto",
-  },
-
-  loadingCard: {
-    maxWidth: "650px",
-    margin: "100px auto",
-    background: "#ffffff",
-    padding: "45px",
-    borderRadius: "14px",
-    textAlign: "center",
-    border: "1px solid #e5e7eb",
-  },
-
-  spinner: {
-    fontSize: "35px",
-    color: "#2563eb",
-    marginBottom: "15px",
+    padding: "25px 30px 60px",
+    fontFamily:
+      "Arial, Helvetica, sans-serif",
+    color: "#111827",
   },
 
   topBar: {
+    maxWidth: "1400px",
+    margin: "0 auto 20px",
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: "20px",
   },
 
   backButton: {
@@ -2199,113 +2416,171 @@ const styles = {
     background: "transparent",
     color: "#2563eb",
     cursor: "pointer",
-    fontWeight: "600",
+    fontWeight: "700",
     fontSize: "14px",
-    padding: 0,
+    padding: "8px 0",
+  },
+
+  dashboardButton: {
+    border: "1px solid #d1d5db",
+    background: "#fff",
+    color: "#374151",
+    borderRadius: "7px",
+    padding: "9px 16px",
+    cursor: "pointer",
+    fontWeight: "600",
   },
 
   header: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: "25px",
-  },
-
-  title: {
-    margin: 0,
-    color: "#111827",
-    fontSize: "30px",
-  },
-
-  subtitle: {
-    marginTop: "8px",
-    color: "#64748b",
-  },
-
-  card: {
-    background: "#ffffff",
-    border: "1px solid #e5e7eb",
-    borderRadius: "14px",
-    padding: "26px",
-    marginBottom: "24px",
-    boxShadow:
-      "0 3px 10px rgba(0,0,0,0.04)",
-  },
-
-  cardHeader: {
+    maxWidth: "1400px",
+    margin: "0 auto 25px",
     display: "flex",
     justifyContent: "space-between",
     alignItems: "flex-start",
     gap: "20px",
-    marginBottom: "22px",
+    flexWrap: "wrap",
+  },
+
+  formLabel: {
+    display: "inline-block",
+    background: "#dbeafe",
+    color: "#1d4ed8",
+    padding: "5px 10px",
+    borderRadius: "5px",
+    fontSize: "11px",
+    fontWeight: "800",
+    marginBottom: "8px",
+  },
+
+  title: {
+    margin: 0,
+    fontSize: "30px",
+    color: "#111827",
+  },
+
+  subtitle: {
+    marginTop: "8px",
+    color: "#6b7280",
+    fontSize: "15px",
+  },
+
+  headerStatus: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "flex-end",
+    gap: "7px",
+  },
+
+  statusCaption: {
+    fontSize: "11px",
+    color: "#6b7280",
+    fontWeight: "800",
+  },
+
+  completedBadge: {
+    background: "#dcfce7",
+    color: "#166534",
+    padding: "8px 14px",
+    borderRadius: "20px",
+    fontWeight: "800",
+    fontSize: "12px",
+  },
+
+  pendingBadge: {
+    background: "#fef3c7",
+    color: "#92400e",
+    padding: "8px 14px",
+    borderRadius: "20px",
+    fontWeight: "800",
+    fontSize: "12px",
+  },
+
+  card: {
+    maxWidth: "1400px",
+    margin: "0 auto 25px",
+    background: "#fff",
+    border: "1px solid #e5e7eb",
+    borderRadius: "12px",
+    overflow: "hidden",
+    boxShadow:
+      "0 3px 12px rgba(0,0,0,0.04)",
+  },
+
+  cardHeader: {
+    padding: "22px 25px",
+    borderBottom:
+      "1px solid #e5e7eb",
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: "15px",
   },
 
   cardTitle: {
     margin: 0,
-    color: "#111827",
     fontSize: "20px",
+    color: "#111827",
   },
 
-  cardSubtitle: {
-    color: "#64748b",
+  cardDescription: {
     margin: "7px 0 0",
+    color: "#6b7280",
     fontSize: "14px",
   },
 
-  applicationBadge: {
-    background: "#eff6ff",
-    color: "#1d4ed8",
-    border: "1px solid #bfdbfe",
-    borderRadius: "8px",
-    padding: "8px 13px",
-    fontWeight: "700",
-    fontSize: "13px",
-  },
-
   infoGrid: {
+    padding: "25px",
     display: "grid",
     gridTemplateColumns:
-      "repeat(auto-fit, minmax(210px, 1fr))",
-    gap: "14px",
+      "repeat(auto-fit, minmax(220px, 1fr))",
+    gap: "16px",
   },
 
   infoItem: {
-    background: "#f8fafc",
+    background: "#f9fafb",
     border: "1px solid #e5e7eb",
-    borderRadius: "9px",
+    borderRadius: "8px",
     padding: "15px",
   },
 
   infoLabel: {
     display: "block",
+    color: "#6b7280",
     fontSize: "11px",
-    color: "#64748b",
-    fontWeight: "700",
+    fontWeight: "800",
     textTransform: "uppercase",
     marginBottom: "6px",
   },
 
   infoValue: {
-    color: "#1f2937",
+    color: "#111827",
     fontSize: "14px",
+  },
+
+  progressCard: {
+    maxWidth: "1400px",
+    margin: "0 auto 25px",
+    background: "#eff6ff",
+    border: "1px solid #bfdbfe",
+    borderRadius: "12px",
+    padding: "24px",
   },
 
   progressHeader: {
     display: "flex",
     justifyContent: "space-between",
-    alignItems: "center",
+    alignItems: "flex-start",
     gap: "20px",
   },
 
-  progressNumber: {
-    fontSize: "24px",
-    color: "#2563eb",
+  progressPercentage: {
+    color: "#1d4ed8",
+    fontSize: "26px",
   },
 
-  progressBackground: {
-    width: "100%",
+  progressBarBackground: {
     height: "10px",
-    background: "#e5e7eb",
+    background: "#dbeafe",
     borderRadius: "20px",
     overflow: "hidden",
     marginTop: "20px",
@@ -2315,82 +2590,79 @@ const styles = {
     height: "100%",
     background: "#2563eb",
     borderRadius: "20px",
-    transition: "width 0.3s ease",
+    transition:
+      "width 0.3s ease",
   },
 
   progressFooter: {
     display: "flex",
     justifyContent: "space-between",
-    marginTop: "9px",
+    marginTop: "10px",
     fontSize: "13px",
-    color: "#64748b",
   },
 
-  materialCount: {
-    background: "#f1f5f9",
-    color: "#334155",
-    padding: "8px 13px",
+  progressComplete: {
+    color: "#15803d",
+    fontWeight: "700",
+  },
+
+  progressPending: {
+    color: "#92400e",
+    fontWeight: "700",
+  },
+
+  materialCounter: {
+    background: "#f3f4f6",
+    color: "#374151",
+    padding: "8px 12px",
     borderRadius: "20px",
-    fontSize: "13px",
+    fontSize: "12px",
     fontWeight: "700",
   },
 
   materialList: {
+    padding: "25px",
     display: "flex",
     flexDirection: "column",
-    gap: "15px",
+    gap: "25px",
   },
 
   materialCard: {
-    display: "flex",
-    gap: "16px",
     border: "1px solid #e5e7eb",
-    borderRadius: "11px",
-    padding: "18px",
-    background: "#ffffff",
+    borderRadius: "10px",
+    overflow: "hidden",
+  },
+
+  materialCardReviewed: {
+    border: "1px solid #86efac",
+    borderRadius: "10px",
+    overflow: "hidden",
+    background: "#fafffb",
+  },
+
+  materialHeader: {
+    padding: "20px",
+    background: "#f8fafc",
+    borderBottom:
+      "1px solid #e5e7eb",
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: "20px",
   },
 
   materialNumber: {
-    width: "36px",
-    height: "36px",
-    minWidth: "36px",
-    borderRadius: "50%",
-    background: "#eff6ff",
-    color: "#1d4ed8",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontWeight: "700",
-  },
-
-  materialContent: {
-    flex: 1,
-    minWidth: 0,
-  },
-
-  materialTop: {
-    display: "flex",
-    justifyContent: "space-between",
-    gap: "20px",
-    alignItems: "flex-start",
+    display: "block",
+    color: "#6b7280",
+    fontSize: "11px",
+    fontWeight: "800",
+    marginBottom: "5px",
   },
 
   materialTitle: {
     margin: 0,
+    fontSize: "18px",
     color: "#111827",
-    fontSize: "17px",
-  },
-
-  materialType: {
-    margin: "5px 0 0",
-    color: "#64748b",
-    fontSize: "13px",
-  },
-
-  materialDescription: {
-    color: "#475569",
-    fontSize: "14px",
-    lineHeight: "1.6",
   },
 
   reviewedBadge: {
@@ -2399,7 +2671,7 @@ const styles = {
     padding: "6px 10px",
     borderRadius: "20px",
     fontSize: "11px",
-    fontWeight: "700",
+    fontWeight: "800",
     whiteSpace: "nowrap",
   },
 
@@ -2409,268 +2681,350 @@ const styles = {
     padding: "6px 10px",
     borderRadius: "20px",
     fontSize: "11px",
-    fontWeight: "700",
+    fontWeight: "800",
     whiteSpace: "nowrap",
   },
 
-  reviewSummary: {
+  materialDetails: {
+    padding: "15px 20px",
     display: "flex",
-    gap: "20px",
-    background: "#f8fafc",
-    border: "1px solid #e5e7eb",
-    padding: "10px 13px",
-    borderRadius: "7px",
-    marginTop: "14px",
-    color: "#475569",
-    fontSize: "13px",
-  },
-
-  materialActions: {
-    display: "flex",
-    gap: "10px",
+    gap: "40px",
     flexWrap: "wrap",
-    marginTop: "15px",
+    borderBottom:
+      "1px solid #e5e7eb",
   },
 
-  primaryButton: {
-    background: "#2563eb",
-    color: "#ffffff",
-    border: "none",
-    padding: "10px 17px",
-    borderRadius: "7px",
-    cursor: "pointer",
-    fontWeight: "600",
-  },
-
-  editButton: {
-    background: "#f59e0b",
-    color: "#ffffff",
-    border: "none",
-    padding: "10px 17px",
-    borderRadius: "7px",
-    cursor: "pointer",
-    fontWeight: "600",
-  },
-
-  viewReviewButton: {
-    background: "#475569",
-    color: "#ffffff",
-    border: "none",
-    padding: "10px 17px",
-    borderRadius: "7px",
-    cursor: "pointer",
-    fontWeight: "600",
-  },
-
-  viewButton: {
-    display: "inline-flex",
-    alignItems: "center",
-    background: "#f1f5f9",
-    color: "#334155",
-    border: "1px solid #cbd5e1",
-    padding: "9px 15px",
-    borderRadius: "7px",
-    textDecoration: "none",
-    fontWeight: "600",
-    fontSize: "13px",
-  },
-
-  secondaryButton: {
-    background: "#ffffff",
-    color: "#374151",
-    border: "1px solid #d1d5db",
-    padding: "10px 17px",
-    borderRadius: "7px",
-    cursor: "pointer",
-    fontWeight: "600",
-  },
-
-  disabledButton: {
-    background: "#93c5fd",
-    color: "#ffffff",
-    border: "none",
-    padding: "10px 17px",
-    borderRadius: "7px",
-    cursor: "not-allowed",
-    fontWeight: "600",
-  },
-
-  error: {
-    background: "#fee2e2",
-    color: "#991b1b",
-    border: "1px solid #fecaca",
-    padding: "15px 18px",
-    borderRadius: "8px",
-    marginBottom: "20px",
-  },
-
-  success: {
-    background: "#dcfce7",
-    color: "#166534",
-    border: "1px solid #bbf7d0",
-    padding: "15px 18px",
-    borderRadius: "8px",
-    marginBottom: "20px",
-  },
-
-  errorCard: {
-    background: "#ffffff",
-    border: "1px solid #fecaca",
-    borderRadius: "12px",
-    padding: "35px",
-    textAlign: "center",
-    marginTop: "70px",
-  },
-
-  completedBadge: {
-    background: "#dcfce7",
-    color: "#166534",
-    padding: "7px 13px",
-    borderRadius: "20px",
-    fontWeight: "700",
-    fontSize: "12px",
-  },
-
-  pendingBadge: {
-    background: "#fef3c7",
-    color: "#92400e",
-    padding: "7px 13px",
-    borderRadius: "20px",
-    fontWeight: "700",
-    fontSize: "12px",
-  },
-
-  guidance: {
-    background: "#eff6ff",
-    border: "1px solid #bfdbfe",
-    borderRadius: "12px",
-    padding: "22px",
-    marginBottom: "30px",
-  },
-
-  guidanceTitle: {
-    marginTop: 0,
-    color: "#1e3a8a",
-  },
-
-  materialLabel: {
+  detailLabel: {
+    display: "block",
+    color: "#6b7280",
     fontSize: "11px",
-    color: "#2563eb",
-    fontWeight: "700",
-    letterSpacing: "0.05em",
+    marginBottom: "4px",
   },
 
-  reviewFormHeader: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    gap: "20px",
-    borderBottom: "1px solid #e5e7eb",
-    paddingBottom: "20px",
+  documentBox: {
+    padding: "18px 20px",
+    background: "#fff",
+    borderBottom:
+      "1px solid #e5e7eb",
   },
 
-  materialInformation: {
-    background: "#f8fafc",
-    border: "1px solid #e5e7eb",
-    borderRadius: "9px",
-    padding: "15px",
-    display: "flex",
-    gap: "10px",
-    alignItems: "center",
-    flexWrap: "wrap",
-    marginTop: "20px",
-  },
-
-  fileLink: {
-    color: "#2563eb",
-    fontWeight: "600",
+  documentButton: {
+    display: "inline-block",
     textDecoration: "none",
-    marginLeft: "auto",
+    background: "#f3f4f6",
+    color: "#2563eb",
+    padding: "9px 14px",
+    borderRadius: "6px",
+    fontWeight: "700",
+    fontSize: "13px",
   },
 
-  section: {
-    borderTop: "1px solid #e5e7eb",
-    paddingTop: "25px",
-    marginTop: "25px",
+  noDocument: {
+    color: "#9ca3af",
+    fontSize: "13px",
   },
 
-  sectionTitle: {
-    marginTop: 0,
-    marginBottom: "20px",
-    color: "#1e3a8a",
-    fontSize: "18px",
+  reviewForm: {
+    padding: "25px",
   },
 
-  twoColumn: {
+  reviewFormTitle: {
+    margin: "0 0 20px",
+    color: "#1f2937",
+    fontSize: "17px",
+  },
+
+  field: {
+    marginBottom: "18px",
+  },
+
+  label: {
+    display: "block",
+    fontSize: "13px",
+    fontWeight: "700",
+    color: "#374151",
+    marginBottom: "7px",
+  },
+
+  textarea: {
+    width: "100%",
+    boxSizing: "border-box",
+    border: "1px solid #d1d5db",
+    borderRadius: "7px",
+    padding: "11px 12px",
+    fontSize: "14px",
+    fontFamily:
+      "Arial, Helvetica, sans-serif",
+    resize: "vertical",
+    outline: "none",
+  },
+
+  twoColumns: {
     display: "grid",
     gridTemplateColumns:
       "repeat(auto-fit, minmax(250px, 1fr))",
     gap: "18px",
   },
 
-  formGroup: {
-    marginBottom: "18px",
-  },
-
-  label: {
-    display: "block",
-    fontWeight: "600",
-    color: "#374151",
-    marginBottom: "7px",
-    fontSize: "14px",
-  },
-
-  required: {
-    color: "#dc2626",
-  },
-
-  input: {
+  select: {
     width: "100%",
     boxSizing: "border-box",
-    padding: "11px 12px",
     border: "1px solid #d1d5db",
     borderRadius: "7px",
-    background: "#ffffff",
+    padding: "11px 12px",
+    background: "#fff",
     fontSize: "14px",
   },
 
-  textarea: {
-    width: "100%",
-    boxSizing: "border-box",
-    padding: "11px 12px",
-    border: "1px solid #d1d5db",
-    borderRadius: "7px",
-    resize: "vertical",
-    fontFamily: "inherit",
-    fontSize: "14px",
-    lineHeight: "1.6",
-  },
-
-  help: {
-    display: "block",
-    color: "#64748b",
-    marginTop: "6px",
-    fontSize: "12px",
-  },
-
-  submitArea: {
+  formActions: {
     display: "flex",
     justifyContent: "flex-end",
-    gap: "12px",
-    borderTop: "1px solid #e5e7eb",
-    paddingTop: "20px",
-    marginTop: "25px",
+    paddingTop: "5px",
   },
 
-  empty: {
+  saveButton: {
+    background: "#2563eb",
+    color: "#fff",
+    border: "none",
+    borderRadius: "7px",
+    padding: "11px 18px",
+    cursor: "pointer",
+    fontWeight: "700",
+  },
+
+  emptyBox: {
     textAlign: "center",
-    padding: "55px 20px",
-    color: "#64748b",
+    padding: "70px 25px",
+    color: "#6b7280",
   },
 
   emptyIcon: {
-    fontSize: "40px",
+    fontSize: "45px",
     marginBottom: "10px",
+  },
+
+  debugBox: {
+    display: "inline-block",
+    marginTop: "15px",
+    padding: "10px 15px",
+    background: "#f3f4f6",
+    borderRadius: "7px",
+    textAlign: "left",
+    fontSize: "12px",
+  },
+
+  completeCard: {
+    maxWidth: "1400px",
+    margin: "0 auto 25px",
+    padding: "25px",
+    background: "#f0fdf4",
+    border: "1px solid #86efac",
+    borderRadius: "12px",
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: "25px",
+    flexWrap: "wrap",
+  },
+
+  completeCardDisabled: {
+    maxWidth: "1400px",
+    margin: "0 auto 25px",
+    padding: "25px",
+    background: "#f9fafb",
+    border: "1px solid #e5e7eb",
+    borderRadius: "12px",
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: "25px",
+    flexWrap: "wrap",
+  },
+
+  completeTitle: {
+    margin: 0,
+    color: "#166534",
+    fontSize: "19px",
+  },
+
+  completeDescription: {
+    margin: "7px 0 0",
+    color: "#4b5563",
+    fontSize: "14px",
+    lineHeight: "1.5",
+    maxWidth: "800px",
+  },
+
+  completeButton: {
+    border: "none",
+    background: "#16a34a",
+    color: "#fff",
+    padding: "12px 20px",
+    borderRadius: "7px",
+    cursor: "pointer",
+    fontWeight: "700",
+    whiteSpace: "nowrap",
+  },
+
+  completeButtonDisabled: {
+    border: "none",
+    background: "#d1d5db",
+    color: "#6b7280",
+    padding: "12px 20px",
+    borderRadius: "7px",
+    cursor: "not-allowed",
+    fontWeight: "700",
+    whiteSpace: "nowrap",
+  },
+
+  workflowCard: {
+    maxWidth: "1400px",
+    margin: "0 auto",
+    background: "#fff",
+    border: "1px solid #e5e7eb",
+    borderRadius: "12px",
+    padding: "25px",
+  },
+
+  workflowTitle: {
+    marginTop: 0,
+    color: "#1f2937",
+  },
+
+  workflow: {
+    display: "flex",
+    alignItems: "stretch",
+    overflowX: "auto",
+    paddingBottom: "10px",
+  },
+
+  workflowStep: {
+    minWidth: "140px",
+    padding: "12px",
+    border: "1px solid #e5e7eb",
+    borderRadius: "8px",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    textAlign: "center",
+    gap: "5px",
+    background: "#f9fafb",
+  },
+
+  workflowStepActive: {
+    minWidth: "140px",
+    padding: "12px",
+    border: "2px solid #2563eb",
+    borderRadius: "8px",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    textAlign: "center",
+    gap: "5px",
+    background: "#eff6ff",
+  },
+
+  workflowCircle: {
+    width: "30px",
+    height: "30px",
+    borderRadius: "50%",
+    background: "#e5e7eb",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontWeight: "700",
+    color: "#6b7280",
+  },
+
+  workflowCircleActive: {
+    width: "30px",
+    height: "30px",
+    borderRadius: "50%",
+    background: "#2563eb",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontWeight: "700",
+    color: "#fff",
+  },
+
+  workflowArrow: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "0 10px",
+    color: "#9ca3af",
+    fontSize: "20px",
+    minWidth: "25px",
+  },
+
+  workflowNote: {
+    marginBottom: 0,
+    marginTop: "20px",
+    padding: "15px",
+    background: "#eff6ff",
+    borderRadius: "7px",
+    color: "#374151",
+    fontSize: "13px",
+    lineHeight: "1.6",
+  },
+
+  errorBox: {
+    maxWidth: "1400px",
+    margin: "0 auto 20px",
+    position: "relative",
+    padding: "15px 45px 15px 18px",
+    background: "#fee2e2",
+    border: "1px solid #fecaca",
+    borderRadius: "8px",
+    color: "#991b1b",
+  },
+
+  successBox: {
+    maxWidth: "1400px",
+    margin: "0 auto 20px",
+    padding: "15px 18px",
+    background: "#dcfce7",
+    border: "1px solid #86efac",
+    borderRadius: "8px",
+    color: "#166534",
+    display: "flex",
+    gap: "10px",
+  },
+
+  closeError: {
+    position: "absolute",
+    right: "12px",
+    top: "8px",
+    border: "none",
+    background: "transparent",
+    fontSize: "20px",
+    cursor: "pointer",
+    color: "#991b1b",
+  },
+
+  loadingBox: {
+    maxWidth: "600px",
+    margin: "120px auto",
+    padding: "50px",
+    background: "#fff",
+    borderRadius: "12px",
+    textAlign: "center",
+    border: "1px solid #e5e7eb",
+  },
+
+  spinner: {
+    width: "32px",
+    height: "32px",
+    border:
+      "4px solid #e5e7eb",
+    borderTop:
+      "4px solid #2563eb",
+    borderRadius: "50%",
+    margin:
+      "0 auto 20px",
+    animation:
+      "spin 1s linear infinite",
   },
 };
 

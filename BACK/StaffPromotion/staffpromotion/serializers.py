@@ -715,11 +715,36 @@ class ReviewerAssignmentSerializer(
     serializers.ModelSerializer
 ):
 
+    # --------------------------------------------------------
+    # APPLICATION ID
+    # --------------------------------------------------------
+
+    application_id = serializers.IntegerField(
+        source="application.id",
+        read_only=True
+    )
+
+    # --------------------------------------------------------
+    # REVIEWER NAME
+    # --------------------------------------------------------
+
     reviewer_name = serializers.SerializerMethodField()
+
+    # --------------------------------------------------------
+    # ASSIGNED BY NAME
+    # --------------------------------------------------------
 
     assigned_by_name = serializers.SerializerMethodField()
 
+    # --------------------------------------------------------
+    # APPLICANT / EMPLOYEE NAME
+    # --------------------------------------------------------
+
     employee_name = serializers.SerializerMethodField()
+
+    # --------------------------------------------------------
+    # APPLICATION STATUS
+    # --------------------------------------------------------
 
     application_status = serializers.CharField(
         source="application.status",
@@ -729,17 +754,52 @@ class ReviewerAssignmentSerializer(
     class Meta:
         model = ReviewerAssignment
 
-        fields = "__all__"
+        fields = [
+            "id",
+
+            # Application
+            "application",
+            "application_id",
+            "application_status",
+
+            # Reviewer
+            "reviewer",
+            "reviewer_name",
+
+            # Assignment information
+            "assigned_by",
+            "assigned_by_name",
+            "assigned_at",
+
+            # Employee
+            "employee_name",
+
+            # Completion
+            "completed",
+            "completed_at",
+
+            # Comments
+            "comments",
+        ]
 
         read_only_fields = [
+            "id",
+            "application_id",
+            "application_status",
+            "reviewer_name",
+            "assigned_by_name",
+            "employee_name",
             "assigned_at",
-            "completed_at"
+            "completed_at",
         ]
+
+    # ========================================================
+    # REVIEWER NAME
+    # ========================================================
 
     def get_reviewer_name(self, obj):
 
         if obj.reviewer:
-
             return (
                 f"{obj.reviewer.first_name} "
                 f"{obj.reviewer.last_name}"
@@ -747,10 +807,13 @@ class ReviewerAssignmentSerializer(
 
         return None
 
+    # ========================================================
+    # ASSIGNED BY NAME
+    # ========================================================
+
     def get_assigned_by_name(self, obj):
 
         if obj.assigned_by:
-
             return (
                 f"{obj.assigned_by.first_name} "
                 f"{obj.assigned_by.last_name}"
@@ -758,9 +821,16 @@ class ReviewerAssignmentSerializer(
 
         return None
 
+    # ========================================================
+    # EMPLOYEE NAME
+    # ========================================================
+
     def get_employee_name(self, obj):
 
-        if obj.application and obj.application.employee:
+        if (
+            obj.application
+            and obj.application.employee
+        ):
 
             employee = obj.application.employee
 
@@ -770,8 +840,6 @@ class ReviewerAssignmentSerializer(
             ).strip()
 
         return None
-
-
 # ============================================================
 # 13. SYSTEM LOG
 # ============================================================

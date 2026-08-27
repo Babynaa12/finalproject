@@ -966,7 +966,7 @@ function Dashboard() {
           RECENT APPLICATIONS
       ======================================================== */}
 
-      {/* <div style={styles.section}>
+      <div style={styles.section}>
 
         <div style={styles.sectionHeader}>
 
@@ -1206,7 +1206,7 @@ function Dashboard() {
 
         </div>
 
-      </div> */}
+      </div>
 
       {/* ========================================================
           QUICK ACTIONS

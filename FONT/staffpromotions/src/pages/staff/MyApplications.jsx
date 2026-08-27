@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from "react";
 import api from "../../services/api";
 
@@ -7,12 +6,76 @@ function MyApplications() {
 
   const [applications, setApplications] = useState([]);
   const [selectedApplication, setSelectedApplication] = useState(null);
+
   const [materials, setMaterials] = useState([]);
+  const [academicReviews, setAcademicReviews] = useState({});
+  const [studentEvaluations, setStudentEvaluations] = useState({});
 
   const [loading, setLoading] = useState(true);
   const [loadingMaterials, setLoadingMaterials] = useState(false);
+  const [loadingReviews, setLoadingReviews] = useState(false);
+  const [loadingEvaluations, setLoadingEvaluations] = useState(false);
 
   const [error, setError] = useState("");
+
+  // ============================================================
+  // TOKEN
+  // ============================================================
+
+  const getToken = () => {
+    return (
+      localStorage.getItem("access_token") ||
+      localStorage.getItem("token")
+    );
+  };
+
+  // ============================================================
+  // NORMALIZE
+  // ============================================================
+
+  const normalize = (value) => {
+    return String(value ?? "")
+      .trim()
+      .toLowerCase()
+      .replace(/_/g, " ")
+      .replace(/\s+/g, " ");
+  };
+
+  // ============================================================
+  // FIRST VALUE
+  // ============================================================
+
+  const firstValue = (obj, fields, defaultValue = "") => {
+    if (!obj) return defaultValue;
+
+    for (const field of fields) {
+      if (
+        obj[field] !== undefined &&
+        obj[field] !== null &&
+        obj[field] !== ""
+      ) {
+        return obj[field];
+      }
+    }
+
+    return defaultValue;
+  };
+
+  // ============================================================
+  // EXTRACT ARRAY
+  // ============================================================
+
+  const extractArray = (data) => {
+    if (Array.isArray(data)) {
+      return data;
+    }
+
+    if (Array.isArray(data?.results)) {
+      return data.results;
+    }
+
+    return [];
+  };
 
   // ============================================================
   // FETCH MY APPLICATIONS
@@ -21,13 +84,6 @@ function MyApplications() {
   useEffect(() => {
     fetchMyApplications();
   }, []);
-
-  const getToken = () => {
-    return (
-      localStorage.getItem("access_token") ||
-      localStorage.getItem("token")
-    );
-  };
 
   const fetchMyApplications = async () => {
     try {
@@ -49,15 +105,11 @@ function MyApplications() {
 
       console.log("MY APPLICATIONS:", res.data);
 
-      const data = Array.isArray(res.data)
-        ? res.data
-        : Array.isArray(res.data?.results)
-        ? res.data.results
-        : [];
+      const data = extractArray(res.data);
 
-      // --------------------------------------------------------
+      // ========================================================
       // FILTER CURRENT STAFF
-      // --------------------------------------------------------
+      // ========================================================
 
       const myApps = data.filter((app) => {
         return (
@@ -68,8 +120,18 @@ function MyApplications() {
         );
       });
 
+      console.log("MY FILTERED APPLICATIONS:", myApps);
+
       setApplications(myApps);
 
+      // ========================================================
+      // FETCH BOTH REVIEW TYPES
+      // ========================================================
+
+      await Promise.all([
+        fetchAcademicReviews(myApps),
+        fetchStudentEvaluations(myApps),
+      ]);
     } catch (err) {
       console.error(
         "Failed to load applications:",
@@ -78,7 +140,7 @@ function MyApplications() {
 
       setError(
         err.response?.data?.detail ||
-        "Failed to load your promotion records."
+          "Failed to load your promotion records."
       );
     } finally {
       setLoading(false);
@@ -86,126 +148,510 @@ function MyApplications() {
   };
 
   // ============================================================
-  // NORMALIZE
+  // FETCH ACADEMIC MATERIAL REVIEWS
   // ============================================================
 
-  const normalize = (value) => {
-    return String(value || "")
-      .trim()
-      .toLowerCase()
-      .replace(/_/g, " ");
-  };
-
-  // ============================================================
-  // CHECKLIST
-  // ============================================================
-
-  const viewChecklist = async (application) => {
+  const fetchAcademicReviews = async (apps) => {
     try {
-      setSelectedApplication(application);
-      setLoadingMaterials(true);
-      setMaterials([]);
-      setError("");
+      setLoadingReviews(true);
 
       const token = getToken();
 
-      const res = await api.get(
-        `/api/promotion-materials/?application=${application.id}`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
+      if (!token || !apps.length) {
+        setAcademicReviews({});
+        return;
+      }
+
+      const reviewMap = {};
+
+      await Promise.all(
+        apps.map(async (app) => {
+          try {
+            const res = await api.get(
+              `/api/academic-material-reviews/?application=${app.id}`,
+              {
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                },
+              }
+            );
+
+            const data = extractArray(res.data);
+
+            reviewMap[app.id] = data;
+
+            console.log(
+              `Academic reviews for application ${app.id}:`,
+              data
+            );
+          } catch (err) {
+            console.error(
+              `Failed to fetch academic reviews for application ${app.id}:`,
+              err.response?.data || err
+            );
+
+            reviewMap[app.id] = [];
+          }
+        })
       );
 
-      const data = Array.isArray(res.data)
-        ? res.data
-        : Array.isArray(res.data?.results)
-        ? res.data.results
-        : [];
+      setAcademicReviews(reviewMap);
 
-      setMaterials(data);
-
-    } catch (err) {
-      console.error(
-        "Failed to load checklist:",
-        err.response?.data || err
-      );
-
-      setMaterials([]);
-
-      setError(
-        "Unable to load the promotion checklist."
+      console.log(
+        "ALL ACADEMIC MATERIAL REVIEWS:",
+        reviewMap
       );
     } finally {
-      setLoadingMaterials(false);
+      setLoadingReviews(false);
     }
   };
 
-  const closeChecklist = () => {
-    setSelectedApplication(null);
-    setMaterials([]);
+  // ============================================================
+  // FETCH STUDENT EVALUATIONS
+  //
+  // IMPORTANT:
+  // Backend endpoint:
+  //
+  // /api/student-evaluations/
+  //
+  // ============================================================
+
+  const fetchStudentEvaluations = async (apps) => {
+    try {
+      setLoadingEvaluations(true);
+
+      const token = getToken();
+
+      if (!token || !apps.length) {
+        setStudentEvaluations({});
+        return;
+      }
+
+      const evaluationMap = {};
+
+      await Promise.all(
+        apps.map(async (app) => {
+          try {
+            const res = await api.get(
+              `/api/student-evaluations/?application=${app.id}`,
+              {
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                },
+              }
+            );
+
+            const data = extractArray(res.data);
+
+            evaluationMap[app.id] = data;
+
+            console.log(
+              `Student evaluations for application ${app.id}:`,
+              data
+            );
+          } catch (err) {
+            console.error(
+              `Failed to fetch student evaluations for application ${app.id}:`,
+              err.response?.data || err
+            );
+
+            evaluationMap[app.id] = [];
+          }
+        })
+      );
+
+      setStudentEvaluations(evaluationMap);
+
+      console.log(
+        "ALL STUDENT EVALUATIONS:",
+        evaluationMap
+      );
+    } finally {
+      setLoadingEvaluations(false);
+    }
   };
 
   // ============================================================
-  // STATUS CLASS
+  // GET APPLICATION REVIEWS
   // ============================================================
 
-  const getStatusClass = (status) => {
-    const value = normalize(status);
-
-    if (!value) {
-      return "status pending";
-    }
-
-    if (
-      value.includes("approved") ||
-      value.includes("recommend") ||
-      value.includes("accepted") ||
-      value.includes("completed") ||
-      value.includes("complete") ||
-      value.includes("passed")
-    ) {
-      return "status approved";
-    }
-
-    if (
-      value.includes("reject") ||
-      value.includes("declined") ||
-      value.includes("failed") ||
-      value.includes("not recommended")
-    ) {
-      return "status rejected";
-    }
-
-    if (
-      value.includes("review") ||
-      value.includes("pending") ||
-      value.includes("waiting") ||
-      value.includes("submitted")
-    ) {
-      return "status review";
-    }
-
-    return "status pending";
+  const getApplicationReviews = (app) => {
+    return academicReviews[app.id] || [];
   };
 
   // ============================================================
-  // GET VALUE FROM MULTIPLE POSSIBLE FIELDS
+  // GET STUDENT EVALUATIONS
   // ============================================================
 
-  const firstValue = (app, fields, defaultValue = "") => {
-    for (const field of fields) {
+  const getApplicationStudentEvaluations = (app) => {
+    return studentEvaluations[app.id] || [];
+  };
+
+  // ============================================================
+  // CHECK ACADEMIC REVIEW COMPLETION
+  // ============================================================
+
+  const isReviewRecordCompleted = (review) => {
+    if (!review) return false;
+
+    const possibleValues = [
+      review.status,
+      review.review_status,
+      review.reviewer_status,
+      review.decision,
+      review.recommendation,
+      review.review_decision,
+      review.assessment_status,
+    ];
+
+    const value = possibleValues.find(
+      (item) =>
+        item !== undefined &&
+        item !== null &&
+        String(item).trim() !== ""
+    );
+
+    if (value !== undefined) {
+      const status = normalize(value);
+
       if (
-        app[field] !== undefined &&
-        app[field] !== null &&
-        app[field] !== ""
+        status.includes("pending") ||
+        status.includes("waiting") ||
+        status.includes("assigned") ||
+        status.includes("in progress") ||
+        status.includes("not reviewed") ||
+        status.includes("not started")
       ) {
-        return app[field];
+        return false;
+      }
+
+      if (
+        status.includes("complete") ||
+        status.includes("approved") ||
+        status.includes("recommend") ||
+        status.includes("accepted") ||
+        status.includes("submitted") ||
+        status.includes("reviewed") ||
+        status.includes("passed")
+      ) {
+        return true;
       }
     }
 
-    return defaultValue;
+    const scoreFields = [
+      review.points,
+      review.score,
+      review.total_points,
+      review.total_score,
+      review.mark,
+      review.rating,
+    ];
+
+    const hasScore = scoreFields.some(
+      (value) =>
+        value !== undefined &&
+        value !== null &&
+        value !== ""
+    );
+
+    const hasComment =
+      review.comment ||
+      review.comments ||
+      review.remarks ||
+      review.reviewer_comment ||
+      review.assessment_comment;
+
+    return Boolean(hasScore || hasComment);
+  };
+
+  // ============================================================
+  // ALL ACADEMIC REVIEWS COMPLETE
+  // ============================================================
+
+  const areAllReviewerAssessmentsComplete = (app) => {
+    const reviews = getApplicationReviews(app);
+
+    if (!reviews.length) {
+      return false;
+    }
+
+    const completedReviews = reviews.filter(
+      isReviewRecordCompleted
+    );
+
+    console.log(
+      `Application ${app.id}: ${completedReviews.length}/${reviews.length} academic reviews completed`
+    );
+
+    return completedReviews.length === reviews.length;
+  };
+
+  // ============================================================
+  // REVIEWER STATUS
+  // ============================================================
+
+  const getReviewerStatus = (app) => {
+    if (areAllReviewerAssessmentsComplete(app)) {
+      return "Completed";
+    }
+
+    return firstValue(
+      app,
+      [
+        "reviewer_recommendation",
+        "reviewer_status",
+        "review_status",
+        "reviewer_decision",
+        "academic_reviewer_status",
+      ],
+      "Waiting"
+    );
+  };
+
+  // ============================================================
+  // STUDENT EVALUATION RECORD COMPLETION
+  //
+  // This is the important fix.
+  // We check the REAL student-evaluation records.
+  // ============================================================
+
+  const isStudentEvaluationCompleted = (evaluation) => {
+    if (!evaluation) return false;
+
+    console.log(
+      "Checking student evaluation:",
+      evaluation
+    );
+
+    // ----------------------------------------------------------
+    // STATUS FIELDS
+    // ----------------------------------------------------------
+
+    const statusFields = [
+      evaluation.status,
+      evaluation.evaluation_status,
+      evaluation.evaluation_result,
+      evaluation.review_status,
+      evaluation.submission_status,
+      evaluation.completion_status,
+      evaluation.teaching_evaluation_status,
+    ];
+
+    const statusValue = statusFields.find(
+      (value) =>
+        value !== undefined &&
+        value !== null &&
+        String(value).trim() !== ""
+    );
+
+    if (statusValue !== undefined) {
+      const status = normalize(statusValue);
+
+      // Definitely NOT completed
+      if (
+        status.includes("pending") ||
+        status.includes("waiting") ||
+        status.includes("assigned") ||
+        status.includes("in progress") ||
+        status.includes("not started") ||
+        status.includes("not submitted") ||
+        status.includes("draft")
+      ) {
+        return false;
+      }
+
+      // Definitely completed
+      if (
+        status.includes("complete") ||
+        status.includes("completed") ||
+        status.includes("submitted") ||
+        status.includes("approved") ||
+        status.includes("accepted") ||
+        status.includes("reviewed") ||
+        status.includes("evaluated") ||
+        status.includes("passed")
+      ) {
+        return true;
+      }
+    }
+
+    // ----------------------------------------------------------
+    // COMPLETION BOOLEAN FIELDS
+    // ----------------------------------------------------------
+
+    const booleanFields = [
+      evaluation.completed,
+      evaluation.is_completed,
+      evaluation.evaluation_completed,
+      evaluation.is_submitted,
+      evaluation.submitted,
+      evaluation.submission_complete,
+    ];
+
+    if (
+      booleanFields.some(
+        (value) => value === true
+      )
+    ) {
+      return true;
+    }
+
+    // ----------------------------------------------------------
+    // DATE FIELDS
+    // ----------------------------------------------------------
+
+    const completionDate = firstValue(
+      evaluation,
+      [
+        "completed_at",
+        "completion_date",
+        "completed_date",
+        "submitted_at",
+        "submission_date",
+        "evaluated_at",
+      ],
+      null
+    );
+
+    if (completionDate) {
+      return true;
+    }
+
+    // ----------------------------------------------------------
+    // SCORE / ANSWERS
+    // ----------------------------------------------------------
+
+    const scoreFields = [
+      evaluation.score,
+      evaluation.total_score,
+      evaluation.total_points,
+      evaluation.mark,
+      evaluation.rating,
+      evaluation.average_score,
+      evaluation.percentage,
+    ];
+
+    const hasScore = scoreFields.some(
+      (value) =>
+        value !== undefined &&
+        value !== null &&
+        value !== ""
+    );
+
+    if (hasScore) {
+      return true;
+    }
+
+    // ----------------------------------------------------------
+    // ANSWER / RESPONSE FIELDS
+    // ----------------------------------------------------------
+
+    const answerFields = [
+      evaluation.answers,
+      evaluation.responses,
+      evaluation.ratings,
+      evaluation.questions,
+      evaluation.feedback,
+    ];
+
+    const hasAnswers = answerFields.some(
+      (value) => {
+        if (value === undefined || value === null) {
+          return false;
+        }
+
+        if (Array.isArray(value)) {
+          return value.length > 0;
+        }
+
+        if (
+          typeof value === "object" &&
+          Object.keys(value).length > 0
+        ) {
+          return true;
+        }
+
+        return String(value).trim() !== "";
+      }
+    );
+
+    if (hasAnswers) {
+      return true;
+    }
+
+    return false;
+  };
+
+  // ============================================================
+  // CHECK ALL STUDENT EVALUATIONS
+  // ============================================================
+
+  const isStudentEvaluationStageComplete = (app) => {
+    const evaluations =
+      getApplicationStudentEvaluations(app);
+
+    if (!evaluations.length) {
+      return false;
+    }
+
+    const completedEvaluations =
+      evaluations.filter(
+        isStudentEvaluationCompleted
+      );
+
+    console.log(
+      `Application ${app.id}: ${completedEvaluations.length}/${evaluations.length} student evaluations completed`
+    );
+
+    return (
+      completedEvaluations.length ===
+      evaluations.length
+    );
+  };
+
+  // ============================================================
+  // STUDENT STATUS
+  //
+  // REAL API DATA TAKES PRIORITY OVER APPLICATION FIELD
+  // ============================================================
+
+  const getStudentStatus = (app) => {
+    const evaluations =
+      getApplicationStudentEvaluations(app);
+
+    // ----------------------------------------------------------
+    // IMPORTANT:
+    // If real evaluation records exist, use them.
+    // ----------------------------------------------------------
+
+    if (evaluations.length > 0) {
+      const completed =
+        evaluations.filter(
+          isStudentEvaluationCompleted
+        ).length;
+
+      if (completed === evaluations.length) {
+        return "Completed";
+      }
+
+      return `In Progress (${completed}/${evaluations.length})`;
+    }
+
+    // ----------------------------------------------------------
+    // FALLBACK TO APPLICATION FIELD
+    // ----------------------------------------------------------
+
+    return firstValue(
+      app,
+      [
+        "student_evaluation_status",
+        "student_evaluation",
+        "student_review_status",
+        "teaching_evaluation_status",
+        "student_evaluation_result",
+      ],
+      "Waiting"
+    );
   };
 
   // ============================================================
@@ -237,42 +683,6 @@ function MyApplications() {
         "dean_status",
         "dean_review_status",
         "dean_decision",
-      ],
-      "Waiting"
-    );
-  };
-
-  // ============================================================
-  // REVIEWER
-  // ============================================================
-
-  const getReviewerStatus = (app) => {
-    return firstValue(
-      app,
-      [
-        "reviewer_recommendation",
-        "reviewer_status",
-        "review_status",
-        "reviewer_decision",
-        "academic_reviewer_status",
-      ],
-      "Waiting"
-    );
-  };
-
-  // ============================================================
-  // STUDENT EVALUATION
-  // ============================================================
-
-  const getStudentStatus = (app) => {
-    return firstValue(
-      app,
-      [
-        "student_evaluation_status",
-        "student_evaluation",
-        "student_review_status",
-        "teaching_evaluation_status",
-        "student_evaluation_result",
       ],
       "Waiting"
     );
@@ -319,11 +729,32 @@ function MyApplications() {
   // ============================================================
 
   const getOverallStatus = (app) => {
-    return getFinalStatus(app);
+    const finalStatus = getFinalStatus(app);
+
+    if (
+      isRejected(finalStatus)
+    ) {
+      return finalStatus;
+    }
+
+    if (
+      isCompleted(finalStatus)
+    ) {
+      return finalStatus;
+    }
+
+    const studentComplete =
+      isStudentEvaluationStageComplete(app);
+
+    if (studentComplete) {
+      return "In Progress";
+    }
+
+    return finalStatus;
   };
 
   // ============================================================
-  // CHECK WHETHER STAGE IS COMPLETED
+  // COMPLETED
   // ============================================================
 
   const isCompleted = (value) => {
@@ -334,15 +765,19 @@ function MyApplications() {
     return (
       status.includes("approved") ||
       status.includes("recommended") ||
+      status.includes("recommend") ||
       status.includes("accepted") ||
       status.includes("completed") ||
       status.includes("complete") ||
-      status.includes("passed")
+      status.includes("passed") ||
+      status.includes("reviewed") ||
+      status.includes("evaluated") ||
+      status.includes("submitted")
     );
   };
 
   // ============================================================
-  // CHECK WHETHER STAGE IS REJECTED
+  // REJECTED
   // ============================================================
 
   const isRejected = (value) => {
@@ -371,6 +806,10 @@ function MyApplications() {
       return "Promotion Rejected";
     }
 
+    // ========================================================
+    // COMMITTEE
+    // ========================================================
+
     const committee = getCommitteeStatus(app);
 
     if (
@@ -385,6 +824,17 @@ function MyApplications() {
       return "Final Decision";
     }
 
+    // ========================================================
+    // STUDENT EVALUATION
+    // ========================================================
+
+    const studentComplete =
+      isStudentEvaluationStageComplete(app);
+
+    if (studentComplete) {
+      return "Promotion Committee";
+    }
+
     const student = getStudentStatus(app);
 
     if (
@@ -395,9 +845,9 @@ function MyApplications() {
       return "Student Evaluation";
     }
 
-    if (isCompleted(student)) {
-      return "Promotion Committee";
-    }
+    // ========================================================
+    // REVIEWER
+    // ========================================================
 
     const reviewer = getReviewerStatus(app);
 
@@ -409,9 +859,16 @@ function MyApplications() {
       return "Reviewer Assessment";
     }
 
-    if (isCompleted(reviewer)) {
+    if (
+      areAllReviewerAssessmentsComplete(app) ||
+      isCompleted(reviewer)
+    ) {
       return "Student Evaluation";
     }
+
+    // ========================================================
+    // DEAN
+    // ========================================================
 
     const dean = getDeanStatus(app);
 
@@ -426,6 +883,10 @@ function MyApplications() {
     if (isCompleted(dean)) {
       return "Reviewer Assessment";
     }
+
+    // ========================================================
+    // HOD
+    // ========================================================
 
     const hod = getHODStatus(app);
 
@@ -442,6 +903,121 @@ function MyApplications() {
     }
 
     return "HOD Review";
+  };
+
+  // ============================================================
+  // CURRENT STAGE INDEX
+  // ============================================================
+
+  const getCurrentStageIndex = (app) => {
+    const final = getFinalStatus(app);
+
+    if (
+      isCompleted(final) ||
+      isRejected(final)
+    ) {
+      return 6;
+    }
+
+    // ========================================================
+    // COMMITTEE
+    // ========================================================
+
+    const committee = getCommitteeStatus(app);
+
+    if (isCompleted(committee)) {
+      return 6;
+    }
+
+    if (
+      committee !== "Waiting" &&
+      !isCompleted(committee) &&
+      !isRejected(committee)
+    ) {
+      return 5;
+    }
+
+    // ========================================================
+    // STUDENT EVALUATION
+    // ========================================================
+
+    if (
+      isStudentEvaluationStageComplete(app)
+    ) {
+      return 5;
+    }
+
+    const student = getStudentStatus(app);
+
+    if (
+      student !== "Waiting" &&
+      !isCompleted(student) &&
+      !isRejected(student)
+    ) {
+      return 4;
+    }
+
+    // ========================================================
+    // REVIEWER
+    // ========================================================
+
+    const reviewer = getReviewerStatus(app);
+
+    if (
+      areAllReviewerAssessmentsComplete(app)
+    ) {
+      return 4;
+    }
+
+    if (isCompleted(reviewer)) {
+      return 4;
+    }
+
+    if (
+      reviewer !== "Waiting" &&
+      !isCompleted(reviewer) &&
+      !isRejected(reviewer)
+    ) {
+      return 3;
+    }
+
+    // ========================================================
+    // DEAN
+    // ========================================================
+
+    const dean = getDeanStatus(app);
+
+    if (isCompleted(dean)) {
+      return 3;
+    }
+
+    if (
+      dean !== "Waiting" &&
+      !isCompleted(dean) &&
+      !isRejected(dean)
+    ) {
+      return 2;
+    }
+
+    // ========================================================
+    // HOD
+    // ========================================================
+
+    const hod = getHODStatus(app);
+
+    if (isCompleted(hod)) {
+      return 2;
+    }
+
+    if (
+      hod !== "Waiting" &&
+      !isCompleted(hod) &&
+      !isRejected(hod)
+    ) {
+      return 1;
+    }
+
+    return 1;
   };
 
   // ============================================================
@@ -462,7 +1038,11 @@ function MyApplications() {
         value !== undefined &&
         value !== ""
       ) {
-        return Number(value).toFixed(2);
+        const number = Number(value);
+
+        if (!Number.isNaN(number)) {
+          return number.toFixed(2);
+        }
       }
     }
 
@@ -494,7 +1074,9 @@ function MyApplications() {
   const getDocumentUrl = (document) => {
     if (!document) return null;
 
-    if (document.startsWith("http")) {
+    if (
+      String(document).startsWith("http")
+    ) {
       return document;
     }
 
@@ -502,7 +1084,7 @@ function MyApplications() {
   };
 
   // ============================================================
-  // POSITION
+  // CURRENT POSITION
   // ============================================================
 
   const getCurrentPosition = (app) => {
@@ -513,6 +1095,10 @@ function MyApplications() {
       "N/A"
     );
   };
+
+  // ============================================================
+  // TARGET POSITION
+  // ============================================================
 
   const getTargetPosition = (app) => {
     return (
@@ -532,19 +1118,24 @@ function MyApplications() {
 
     const parsed = new Date(date);
 
-    if (Number.isNaN(parsed.getTime())) {
+    if (
+      Number.isNaN(parsed.getTime())
+    ) {
       return "N/A";
     }
 
-    return parsed.toLocaleDateString("en-GB", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
+    return parsed.toLocaleDateString(
+      "en-GB",
+      {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      }
+    );
   };
 
   // ============================================================
-  // PROGRESS STAGE
+  // STAGES
   // ============================================================
 
   const stages = [
@@ -578,6 +1169,10 @@ function MyApplications() {
     },
   ];
 
+  // ============================================================
+  // STAGE STATUS
+  // ============================================================
+
   const getStageStatus = (app, key) => {
     switch (key) {
       case "submitted":
@@ -607,67 +1202,53 @@ function MyApplications() {
   };
 
   // ============================================================
-  // STAGE INDEX
+  // VIEW CHECKLIST
   // ============================================================
 
-  const getCurrentStageIndex = (app) => {
-    const final = getFinalStatus(app);
+  const viewChecklist = async (application) => {
+    try {
+      setSelectedApplication(application);
+      setLoadingMaterials(true);
+      setMaterials([]);
+      setError("");
 
-    if (isCompleted(final) || isRejected(final)) {
-      return 6;
+      const token = getToken();
+
+      const res = await api.get(
+        `/api/promotion-materials/?application=${application.id}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      const data = extractArray(res.data);
+
+      setMaterials(data);
+    } catch (err) {
+      console.error(
+        "Failed to load checklist:",
+        err.response?.data || err
+      );
+
+      setMaterials([]);
+
+      setError(
+        "Unable to load the promotion checklist."
+      );
+    } finally {
+      setLoadingMaterials(false);
     }
+  };
 
-    const committee = getCommitteeStatus(app);
+  // ============================================================
+  // CLOSE CHECKLIST
+  // ============================================================
 
-    if (isCompleted(committee)) {
-      return 6;
-    }
-
-    if (committee !== "Waiting") {
-      return 5;
-    }
-
-    const student = getStudentStatus(app);
-
-    if (isCompleted(student)) {
-      return 5;
-    }
-
-    if (student !== "Waiting") {
-      return 4;
-    }
-
-    const reviewer = getReviewerStatus(app);
-
-    if (isCompleted(reviewer)) {
-      return 4;
-    }
-
-    if (reviewer !== "Waiting") {
-      return 3;
-    }
-
-    const dean = getDeanStatus(app);
-
-    if (isCompleted(dean)) {
-      return 3;
-    }
-
-    if (dean !== "Waiting") {
-      return 2;
-    }
-
-    const hod = getHODStatus(app);
-
-    if (isCompleted(hod)) {
-      return 2;
-    }
-
-    if (hod !== "Waiting") {
-      return 1;
-    }
-
-    return 1;
+  const closeChecklist = () => {
+    setSelectedApplication(null);
+    setMaterials([]);
   };
 
   // ============================================================
@@ -679,7 +1260,10 @@ function MyApplications() {
       <div style={styles.page}>
         <div style={styles.loadingBox}>
           <div style={styles.spinner}></div>
-          <p>Loading your promotion records...</p>
+
+          <p>
+            Loading your promotion records...
+          </p>
         </div>
       </div>
     );
@@ -702,9 +1286,10 @@ function MyApplications() {
           </h2>
 
           <p style={styles.subtitle}>
-            Track your promotion application from submission
-            through HOD, Dean, reviewers, student evaluation,
-            promotion committee and final decision.
+            Track your promotion application from
+            submission through HOD, Dean, academic
+            reviewer, student evaluation, promotion
+            committee and final decision.
           </p>
         </div>
 
@@ -721,6 +1306,7 @@ function MyApplications() {
 
       {error && (
         <div style={styles.error}>
+
           ⚠ {error}
 
           <button
@@ -729,10 +1315,11 @@ function MyApplications() {
           >
             ×
           </button>
+
         </div>
       )}
 
-      {/* STAFF */}
+      {/* STAFF CARD */}
 
       <div style={styles.staffCard}>
 
@@ -747,7 +1334,7 @@ function MyApplications() {
               `${user?.first_name || ""} ${
                 user?.last_name || ""
               }`.trim() ||
-              "Staff Member"}
+              getApplicantName(applications[0] || {})}
           </h3>
         </div>
 
@@ -773,6 +1360,16 @@ function MyApplications() {
 
       </div>
 
+      {/* LOADING */}
+
+      {(loadingReviews ||
+        loadingEvaluations) && (
+        <div style={styles.reviewLoading}>
+          Checking promotion review and student
+          evaluation progress...
+        </div>
+      )}
+
       {/* NO APPLICATION */}
 
       {applications.length === 0 ? (
@@ -788,7 +1385,8 @@ function MyApplications() {
           </h3>
 
           <p>
-            You have not submitted a promotion request yet.
+            You have not submitted a promotion
+            request yet.
           </p>
 
         </div>
@@ -799,9 +1397,40 @@ function MyApplications() {
 
           {applications.map((app) => {
 
-            const status = getOverallStatus(app);
-            const currentStage = getCurrentStage(app);
-            const currentIndex = getCurrentStageIndex(app);
+            const status =
+              getOverallStatus(app);
+
+            const currentStage =
+              getCurrentStage(app);
+
+            const currentIndex =
+              getCurrentStageIndex(app);
+
+            const reviews =
+              getApplicationReviews(app);
+
+            const evaluations =
+              getApplicationStudentEvaluations(app);
+
+            const completedReviews =
+              reviews.filter(
+                isReviewRecordCompleted
+              ).length;
+
+            const completedEvaluations =
+              evaluations.filter(
+                isStudentEvaluationCompleted
+              ).length;
+
+            const reviewerComplete =
+              areAllReviewerAssessmentsComplete(
+                app
+              );
+
+            const studentComplete =
+              isStudentEvaluationStageComplete(
+                app
+              );
 
             return (
 
@@ -816,28 +1445,45 @@ function MyApplications() {
 
                   <div>
 
-                    <span style={styles.applicationNumber}>
-                      PROMOTION APPLICATION #{app.id}
+                    <span
+                      style={
+                        styles.applicationNumber
+                      }
+                    >
+                      PROMOTION APPLICATION #
+                      {app.id}
                     </span>
 
-                    <h3 style={styles.positionTitle}>
+                    <h3
+                      style={
+                        styles.positionTitle
+                      }
+                    >
                       {getCurrentPosition(app)}
                       {" → "}
                       {getTargetPosition(app)}
                     </h3>
 
-                    <p style={styles.submittedDate}>
+                    <p
+                      style={
+                        styles.submittedDate
+                      }
+                    >
                       Submitted:{" "}
                       {formatDate(
                         app.created_at ||
-                        app.submitted_at ||
-                        app.application_date
+                          app.submitted_at ||
+                          app.application_date
                       )}
                     </p>
 
                   </div>
 
-                  <span className={getStatusClass(status)}>
+                  <span
+                    className={getStatusClass(
+                      status
+                    )}
+                  >
                     {status}
                   </span>
 
@@ -845,163 +1491,350 @@ function MyApplications() {
 
                 {/* SUMMARY */}
 
-                <div style={styles.summaryGrid}>
+                <div
+                  style={
+                    styles.summaryGrid
+                  }
+                >
 
-                  <div style={styles.summaryItem}>
-                    <span style={styles.summaryLabel}>
+                  <div
+                    style={
+                      styles.summaryItem
+                    }
+                  >
+                    <span
+                      style={
+                        styles.summaryLabel
+                      }
+                    >
                       Current Position
                     </span>
 
                     <strong>
-                      {getCurrentPosition(app)}
+                      {getCurrentPosition(
+                        app
+                      )}
                     </strong>
                   </div>
 
-                  <div style={styles.summaryItem}>
-                    <span style={styles.summaryLabel}>
+                  <div
+                    style={
+                      styles.summaryItem
+                    }
+                  >
+                    <span
+                      style={
+                        styles.summaryLabel
+                      }
+                    >
                       Position Applied For
                     </span>
 
                     <strong>
-                      {getTargetPosition(app)}
+                      {getTargetPosition(
+                        app
+                      )}
                     </strong>
                   </div>
 
-                  <div style={styles.summaryItem}>
-                    <span style={styles.summaryLabel}>
+                  <div
+                    style={
+                      styles.summaryItem
+                    }
+                  >
+                    <span
+                      style={
+                        styles.summaryLabel
+                      }
+                    >
                       Total Score
                     </span>
 
-                    <strong style={styles.points}>
+                    <strong
+                      style={styles.points}
+                    >
                       {getTotalPoints(app)}
                     </strong>
                   </div>
 
-                  <div style={styles.summaryItem}>
-                    <span style={styles.summaryLabel}>
+                  <div
+                    style={
+                      styles.summaryItem
+                    }
+                  >
+                    <span
+                      style={
+                        styles.summaryLabel
+                      }
+                    >
                       Current Stage
                     </span>
 
-                    <strong style={styles.currentStage}>
+                    <strong
+                      style={
+                        styles.currentStage
+                      }
+                    >
                       {currentStage}
                     </strong>
                   </div>
 
                 </div>
 
-                {/* ==================================================
-                    APPROVAL PROGRESS
-                ================================================== */}
+                {/* ACADEMIC REVIEWER PROGRESS */}
 
-                <div style={styles.progressSection}>
+                {reviews.length > 0 && (
 
-                  <h4 style={styles.progressTitle}>
+                  <div
+                    style={
+                      reviewerComplete
+                        ? styles.reviewerCompleteBox
+                        : styles.reviewerProgressBox
+                    }
+                  >
+
+                    <div>
+
+                      <strong>
+                        Academic Reviewer Progress
+                      </strong>
+
+                      <p
+                        style={
+                          styles.reviewerProgressText
+                        }
+                      >
+                        {completedReviews} of{" "}
+                        {reviews.length} academic
+                        material reviews completed.
+                      </p>
+
+                    </div>
+
+                    <span
+                      style={
+                        reviewerComplete
+                          ? styles.completeBadge
+                          : styles.progressBadge
+                      }
+                    >
+                      {reviewerComplete
+                        ? "✓ Reviewer Completed"
+                        : "In Progress"}
+                    </span>
+
+                  </div>
+
+                )}
+
+                {/* STUDENT EVALUATION PROGRESS */}
+
+                {evaluations.length > 0 && (
+
+                  <div
+                    style={
+                      studentComplete
+                        ? styles.studentCompleteBox
+                        : styles.studentProgressBox
+                    }
+                  >
+
+                    <div>
+
+                      <strong>
+                        Student Evaluation Progress
+                      </strong>
+
+                      <p
+                        style={
+                          styles.reviewerProgressText
+                        }
+                      >
+                        {completedEvaluations} of{" "}
+                        {evaluations.length} student
+                        evaluations completed.
+                      </p>
+
+                    </div>
+
+                    <span
+                      style={
+                        studentComplete
+                          ? styles.completeBadge
+                          : styles.progressBadge
+                      }
+                    >
+                      {studentComplete
+                        ? "✓ Evaluation Completed"
+                        : "In Progress"}
+                    </span>
+
+                  </div>
+
+                )}
+
+                {/* APPROVAL PROGRESS */}
+
+                <div
+                  style={
+                    styles.progressSection
+                  }
+                >
+
+                  <h4
+                    style={
+                      styles.progressTitle
+                    }
+                  >
                     Promotion Approval Progress
                   </h4>
 
-                  <div style={styles.progressContainer}>
+                  <div
+                    style={
+                      styles.progressContainer
+                    }
+                  >
 
-                    {stages.map((stage, index) => {
+                    {stages.map(
+                      (stage, index) => {
 
-                      const stageStatus =
-                        getStageStatus(app, stage.key);
+                        const stageStatus =
+                          getStageStatus(
+                            app,
+                            stage.key
+                          );
 
-                      const completed =
-                        index < currentIndex ||
-                        (
-                          index === currentIndex &&
-                          isCompleted(stageStatus)
-                        );
+                        const completed =
+                          index < currentIndex ||
+                          (
+                            index ===
+                              currentIndex &&
+                            isCompleted(
+                              stageStatus
+                            )
+                          );
 
-                      const active =
-                        index === currentIndex;
+                        const active =
+                          index ===
+                          currentIndex;
 
-                      const rejected =
-                        isRejected(stageStatus);
+                        const rejected =
+                          isRejected(
+                            stageStatus
+                          );
 
-                      return (
-
-                        <div
-                          key={stage.key}
-                          style={styles.progressItem}
-                        >
+                        return (
 
                           <div
+                            key={stage.key}
                             style={
-                              completed
-                                ? styles.stepCircleCompleted
-                                : rejected
-                                ? styles.stepCircleRejected
-                                : active
-                                ? styles.stepCircleActive
-                                : styles.stepCircle
+                              styles.progressItem
                             }
                           >
-                            {completed
-                              ? "✓"
-                              : rejected
-                              ? "×"
-                              : index + 1}
-                          </div>
 
-                          <span
-                            style={
-                              completed
-                                ? styles.stageLabelCompleted
-                                : active
-                                ? styles.stageLabelActive
-                                : styles.stageLabel
-                            }
-                          >
-                            {stage.title}
-                          </span>
-
-                          {index < stages.length - 1 && (
                             <div
                               style={
-                                index < currentIndex
-                                  ? styles.progressLineCompleted
-                                  : styles.progressLine
+                                completed
+                                  ? styles.stepCircleCompleted
+                                  : rejected
+                                  ? styles.stepCircleRejected
+                                  : active
+                                  ? styles.stepCircleActive
+                                  : styles.stepCircle
                               }
-                            />
-                          )}
+                            >
 
-                        </div>
+                              {completed
+                                ? "✓"
+                                : rejected
+                                ? "×"
+                                : index + 1}
 
-                      );
-                    })}
+                            </div>
+
+                            <span
+                              style={
+                                completed
+                                  ? styles.stageLabelCompleted
+                                  : active
+                                  ? styles.stageLabelActive
+                                  : styles.stageLabel
+                              }
+                            >
+                              {stage.title}
+                            </span>
+
+                            {index <
+                              stages.length - 1 && (
+                              <div
+                                style={
+                                  index <
+                                  currentIndex
+                                    ? styles.progressLineCompleted
+                                    : styles.progressLine
+                                }
+                              />
+                            )}
+
+                          </div>
+
+                        );
+                      }
+                    )}
 
                   </div>
 
                 </div>
 
-                {/* ==================================================
-                    APPROVAL STATUS TABLE
-                ================================================== */}
+                {/* STATUS TABLE */}
 
-                <div style={styles.statusSection}>
+                <div
+                  style={
+                    styles.statusSection
+                  }
+                >
 
-                  <h4 style={styles.statusTitle}>
+                  <h4
+                    style={
+                      styles.statusTitle
+                    }
+                  >
                     Approval Stage Details
                   </h4>
 
-                  <div style={styles.statusTableWrapper}>
+                  <div
+                    style={
+                      styles.statusTableWrapper
+                    }
+                  >
 
-                    <table style={styles.statusTable}>
+                    <table
+                      style={
+                        styles.statusTable
+                      }
+                    >
 
                       <thead>
 
                         <tr>
                           <th>#</th>
-                          <th>Approval Stage</th>
-                          <th>Status / Recommendation</th>
+                          <th>
+                            Approval Stage
+                          </th>
+                          <th>
+                            Status /
+                            Recommendation
+                          </th>
                         </tr>
 
                       </thead>
 
                       <tbody>
 
+                        {/* SUBMITTED */}
+
                         <tr>
+
                           <td>1</td>
 
                           <td>
@@ -1019,16 +1852,19 @@ function MyApplications() {
                               Submitted
                             </span>
                           </td>
+
                         </tr>
 
                         {/* HOD */}
 
                         <tr>
+
                           <td>2</td>
 
                           <td>
                             <strong>
-                              Head of Department (HOD)
+                              Head of Department
+                              (HOD)
                             </strong>
 
                             <small>
@@ -1045,11 +1881,13 @@ function MyApplications() {
                               {getHODStatus(app)}
                             </span>
                           </td>
+
                         </tr>
 
                         {/* DEAN */}
 
                         <tr>
+
                           <td>3</td>
 
                           <td>
@@ -1058,7 +1896,8 @@ function MyApplications() {
                             </strong>
 
                             <small>
-                              College / Faculty review
+                              College / Faculty
+                              review
                             </small>
                           </td>
 
@@ -1071,11 +1910,13 @@ function MyApplications() {
                               {getDeanStatus(app)}
                             </span>
                           </td>
+
                         </tr>
 
                         {/* REVIEWER */}
 
                         <tr>
+
                           <td>4</td>
 
                           <td>
@@ -1084,24 +1925,46 @@ function MyApplications() {
                             </strong>
 
                             <small>
-                              Independent academic assessment
+                              Independent academic
+                              assessment
                             </small>
                           </td>
 
                           <td>
+
                             <span
                               className={getStatusClass(
-                                getReviewerStatus(app)
+                                getReviewerStatus(
+                                  app
+                                )
                               )}
                             >
-                              {getReviewerStatus(app)}
+                              {getReviewerStatus(
+                                app
+                              )}
                             </span>
+
+                            {reviews.length >
+                              0 && (
+                              <small
+                                style={
+                                  styles.reviewCount
+                                }
+                              >
+                                {completedReviews}/
+                                {reviews.length}{" "}
+                                reviews completed
+                              </small>
+                            )}
+
                           </td>
+
                         </tr>
 
-                        {/* STUDENT */}
+                        {/* STUDENT EVALUATION */}
 
                         <tr>
+
                           <td>5</td>
 
                           <td>
@@ -1110,24 +1973,46 @@ function MyApplications() {
                             </strong>
 
                             <small>
-                              Student confidential teaching evaluation
+                              Student confidential
+                              teaching evaluation
                             </small>
                           </td>
 
                           <td>
+
                             <span
                               className={getStatusClass(
-                                getStudentStatus(app)
+                                getStudentStatus(
+                                  app
+                                )
                               )}
                             >
-                              {getStudentStatus(app)}
+                              {getStudentStatus(
+                                app
+                              )}
                             </span>
+
+                            {evaluations.length >
+                              0 && (
+                              <small
+                                style={
+                                  styles.reviewCount
+                                }
+                              >
+                                {completedEvaluations}/
+                                {evaluations.length}{" "}
+                                evaluations completed
+                              </small>
+                            )}
+
                           </td>
+
                         </tr>
 
                         {/* COMMITTEE */}
 
                         <tr>
+
                           <td>6</td>
 
                           <td>
@@ -1136,24 +2021,35 @@ function MyApplications() {
                             </strong>
 
                             <small>
-                              Committee recommendation
+                              Committee
+                              recommendation
                             </small>
                           </td>
 
                           <td>
                             <span
                               className={getStatusClass(
-                                getCommitteeStatus(app)
+                                getCommitteeStatus(
+                                  app
+                                )
                               )}
                             >
-                              {getCommitteeStatus(app)}
+                              {getCommitteeStatus(
+                                app
+                              )}
                             </span>
                           </td>
+
                         </tr>
 
                         {/* FINAL */}
 
-                        <tr style={styles.finalRow}>
+                        <tr
+                          style={
+                            styles.finalRow
+                          }
+                        >
+
                           <td>7</td>
 
                           <td>
@@ -1162,19 +2058,25 @@ function MyApplications() {
                             </strong>
 
                             <small>
-                              Final promotion decision
+                              Final promotion
+                              decision
                             </small>
                           </td>
 
                           <td>
                             <span
                               className={getStatusClass(
-                                getFinalStatus(app)
+                                getFinalStatus(
+                                  app
+                                )
                               )}
                             >
-                              {getFinalStatus(app)}
+                              {getFinalStatus(
+                                app
+                              )}
                             </span>
                           </td>
+
                         </tr>
 
                       </tbody>
@@ -1185,25 +2087,31 @@ function MyApplications() {
 
                 </div>
 
-                {/* ==================================================
-                    ACTIONS
-                ================================================== */}
+                {/* ACTIONS */}
 
                 <div style={styles.actions}>
 
                   <button
-                    onClick={() => viewChecklist(app)}
-                    style={styles.checklistButton}
+                    onClick={() =>
+                      viewChecklist(app)
+                    }
+                    style={
+                      styles.checklistButton
+                    }
                   >
                     📋 View Promotion Checklist
                   </button>
 
                   {app.cv && (
                     <a
-                      href={getDocumentUrl(app.cv)}
+                      href={getDocumentUrl(
+                        app.cv
+                      )}
                       target="_blank"
                       rel="noreferrer"
-                      style={styles.documentButton}
+                      style={
+                        styles.documentButton
+                      }
                     >
                       📄 View CV
                     </a>
@@ -1212,42 +2120,63 @@ function MyApplications() {
                 </div>
 
               </div>
-
             );
           })}
 
         </div>
       )}
 
-      {/* ======================================================
-          CHECKLIST MODAL
-      ====================================================== */}
+      {/* CHECKLIST MODAL */}
 
       {selectedApplication && (
 
-        <div style={styles.modalOverlay}>
+        <div
+          style={
+            styles.modalOverlay
+          }
+        >
 
           <div style={styles.modal}>
 
-            <div style={styles.modalHeader}>
+            <div
+              style={
+                styles.modalHeader
+              }
+            >
 
               <div>
 
-                <h2 style={styles.modalTitle}>
+                <h2
+                  style={
+                    styles.modalTitle
+                  }
+                >
                   Promotion Checklist
                 </h2>
 
-                <p style={styles.modalSubtitle}>
-                  {getCurrentPosition(selectedApplication)}
+                <p
+                  style={
+                    styles.modalSubtitle
+                  }
+                >
+                  {getCurrentPosition(
+                    selectedApplication
+                  )}
                   {" → "}
-                  {getTargetPosition(selectedApplication)}
+                  {getTargetPosition(
+                    selectedApplication
+                  )}
                 </p>
 
               </div>
 
               <button
-                onClick={closeChecklist}
-                style={styles.modalClose}
+                onClick={
+                  closeChecklist
+                }
+                style={
+                  styles.modalClose
+                }
               >
                 ×
               </button>
@@ -1256,127 +2185,152 @@ function MyApplications() {
 
             {loadingMaterials ? (
 
-              <div style={styles.modalLoading}>
+              <div
+                style={
+                  styles.modalLoading
+                }
+              >
 
-                <div style={styles.spinner}></div>
+                <div
+                  style={
+                    styles.spinner
+                  }
+                ></div>
 
                 <p>
-                  Loading promotion checklist...
+                  Loading promotion
+                  checklist...
                 </p>
 
               </div>
 
             ) : materials.length === 0 ? (
 
-              <div style={styles.noMaterials}>
-
+              <div
+                style={
+                  styles.noMaterials
+                }
+              >
                 <p>
-                  No promotion materials were found
-                  for this submission.
+                  No promotion materials were
+                  found for this submission.
                 </p>
-
               </div>
 
             ) : (
 
-              <div style={styles.modalTableWrapper}>
+              <div
+                style={
+                  styles.modalTableWrapper
+                }
+              >
 
-                <table style={styles.checklistTable}>
+                <table
+                  style={
+                    styles.checklistTable
+                  }
+                >
 
                   <thead>
 
                     <tr>
-
                       <th>S/No</th>
-
-                      <th>Promotion Material</th>
-
-                      <th>Score / Points</th>
-
-                      <th>Supporting Document</th>
-
-                      <th>Review Status</th>
-
+                      <th>
+                        Promotion Material
+                      </th>
+                      <th>
+                        Score / Points
+                      </th>
+                      <th>
+                        Supporting Document
+                      </th>
+                      <th>
+                        Review Status
+                      </th>
                     </tr>
 
                   </thead>
 
                   <tbody>
 
-                    {materials.map((material, index) => (
+                    {materials.map(
+                      (material, index) => (
 
-                      <tr
-                        key={
-                          material.id ||
-                          index
-                        }
-                      >
+                        <tr
+                          key={
+                            material.id ||
+                            index
+                          }
+                        >
 
-                        <td>
-                          {index + 1}
-                        </td>
+                          <td>
+                            {index + 1}
+                          </td>
 
-                        <td>
-                          {material.material_type_display ||
-                            material.material_type ||
-                            material.title ||
-                            "Promotion Material"}
-                        </td>
+                          <td>
+                            {material.material_type_display ||
+                              material.material_type ||
+                              material.title ||
+                              "Promotion Material"}
+                          </td>
 
-                        <td>
-                          <strong>
-                            {material.points ?? "0"}
-                          </strong>
-                        </td>
+                          <td>
+                            <strong>
+                              {material.points ??
+                                "0"}
+                            </strong>
+                          </td>
 
-                        <td>
+                          <td>
 
-                          {material.document ? (
+                            {material.document ? (
 
-                            <a
-                              href={getDocumentUrl(
-                                material.document
-                              )}
-                              target="_blank"
-                              rel="noreferrer"
-                              style={styles.viewDocument}
-                            >
-                              📄 View PDF
-                            </a>
+                              <a
+                                href={getDocumentUrl(
+                                  material.document
+                                )}
+                                target="_blank"
+                                rel="noreferrer"
+                                style={
+                                  styles.viewDocument
+                                }
+                              >
+                                📄 View PDF
+                              </a>
 
-                          ) : (
+                            ) : (
+
+                              <span
+                                style={
+                                  styles.noDocument
+                                }
+                              >
+                                No document
+                              </span>
+
+                            )}
+
+                          </td>
+
+                          <td>
 
                             <span
-                              style={
-                                styles.noDocument
-                              }
+                              className={getStatusClass(
+                                material.status ||
+                                  material.review_status ||
+                                  "Submitted"
+                              )}
                             >
-                              No document
+                              {material.status ||
+                                material.review_status ||
+                                "Submitted"}
                             </span>
 
-                          )}
+                          </td>
 
-                        </td>
-
-                        <td>
-
-                          <span
-                            className={getStatusClass(
-                              material.status ||
-                              material.review_status ||
-                              "Submitted"
-                            )}
-                          >
-                            {material.status ||
-                              material.review_status ||
-                              "Submitted"}
-                          </span>
-
-                        </td>
-
-                      </tr>
-
-                    ))}
+                        </tr>
+                      )
+                    )}
 
                   </tbody>
 
@@ -1386,24 +2340,32 @@ function MyApplications() {
 
                       <td
                         colSpan="2"
-                        style={styles.totalLabel}
+                        style={
+                          styles.totalLabel
+                        }
                       >
                         TOTAL SCORE
                       </td>
 
-                      <td style={styles.totalValue}>
-
+                      <td
+                        style={
+                          styles.totalValue
+                        }
+                      >
                         {materials
                           .reduce(
-                            (total, item) =>
+                            (
+                              total,
+                              item
+                            ) =>
                               total +
                               Number(
-                                item.points || 0
+                                item.points ||
+                                  0
                               ),
                             0
                           )
                           .toFixed(2)}
-
                       </td>
 
                       <td colSpan="2"></td>
@@ -1418,16 +2380,29 @@ function MyApplications() {
 
             )}
 
-            <div style={styles.modalFooter}>
+            <div
+              style={
+                styles.modalFooter
+              }
+            >
 
-              <p style={styles.footerText}>
-                Your promotion application is progressing
-                through the responsible approval stages.
+              <p
+                style={
+                  styles.footerText
+                }
+              >
+                Your promotion application is
+                progressing through the responsible
+                approval stages.
               </p>
 
               <button
-                onClick={closeChecklist}
-                style={styles.closeButton}
+                onClick={
+                  closeChecklist
+                }
+                style={
+                  styles.closeButton
+                }
               >
                 Close
               </button>
@@ -1444,13 +2419,62 @@ function MyApplications() {
   );
 }
 
+// ============================================================
+// STATUS CLASS
+// ============================================================
+
+const getStatusClass = (status) => {
+  const value = String(status ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/_/g, " ");
+
+  if (!value) {
+    return "status pending";
+  }
+
+  if (
+    value.includes("approved") ||
+    value.includes("recommend") ||
+    value.includes("accepted") ||
+    value.includes("completed") ||
+    value.includes("complete") ||
+    value.includes("passed") ||
+    value.includes("reviewed") ||
+    value.includes("evaluated") ||
+    value === "submitted"
+  ) {
+    return "status approved";
+  }
+
+  if (
+    value.includes("reject") ||
+    value.includes("declined") ||
+    value.includes("failed") ||
+    value.includes("not recommended")
+  ) {
+    return "status rejected";
+  }
+
+  if (
+    value.includes("review") ||
+    value.includes("pending") ||
+    value.includes("waiting") ||
+    value.includes("in progress") ||
+    value.includes("assigned") ||
+    value.includes("draft")
+  ) {
+    return "status review";
+  }
+
+  return "status pending";
+};
 
 // ============================================================
 // STYLES
 // ============================================================
 
 const styles = {
-
   page: {
     maxWidth: "1250px",
     margin: "30px auto",
@@ -1520,6 +2544,97 @@ const styles = {
     color: "#374151",
   },
 
+  reviewLoading: {
+    background: "#eff6ff",
+    border: "1px solid #bfdbfe",
+    color: "#1d4ed8",
+    padding: "12px 16px",
+    borderRadius: "8px",
+    marginBottom: "20px",
+    fontSize: "14px",
+  },
+
+  reviewerProgressBox: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: "15px",
+    background: "#fff7ed",
+    border: "1px solid #fed7aa",
+    borderRadius: "8px",
+    padding: "14px 16px",
+    marginBottom: "20px",
+  },
+
+  reviewerCompleteBox: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: "15px",
+    background: "#f0fdf4",
+    border: "1px solid #bbf7d0",
+    borderRadius: "8px",
+    padding: "14px 16px",
+    marginBottom: "20px",
+  },
+
+  studentProgressBox: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: "15px",
+    background: "#eff6ff",
+    border: "1px solid #bfdbfe",
+    borderRadius: "8px",
+    padding: "14px 16px",
+    marginBottom: "20px",
+  },
+
+  studentCompleteBox: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: "15px",
+    background: "#f0fdf4",
+    border: "1px solid #bbf7d0",
+    borderRadius: "8px",
+    padding: "14px 16px",
+    marginBottom: "20px",
+  },
+
+  reviewerProgressText: {
+    margin: "5px 0 0",
+    color: "#6b7280",
+    fontSize: "13px",
+  },
+
+  completeBadge: {
+    background: "#dcfce7",
+    color: "#15803d",
+    padding: "7px 12px",
+    borderRadius: "20px",
+    fontSize: "12px",
+    fontWeight: "700",
+    whiteSpace: "nowrap",
+  },
+
+  progressBadge: {
+    background: "#ffedd5",
+    color: "#c2410c",
+    padding: "7px 12px",
+    borderRadius: "20px",
+    fontSize: "12px",
+    fontWeight: "700",
+    whiteSpace: "nowrap",
+  },
+
+  reviewCount: {
+    display: "block",
+    marginTop: "5px",
+    color: "#6b7280",
+    fontSize: "11px",
+  },
+
   error: {
     position: "relative",
     padding: "14px 45px 14px 15px",
@@ -1579,7 +2694,8 @@ const styles = {
     border: "1px solid #e5e7eb",
     borderRadius: "12px",
     padding: "25px",
-    boxShadow: "0 4px 15px rgba(0,0,0,0.05)",
+    boxShadow:
+      "0 4px 15px rgba(0,0,0,0.05)",
   },
 
   cardHeader: {
@@ -1832,7 +2948,8 @@ const styles = {
     overflowY: "auto",
     background: "#fff",
     borderRadius: "12px",
-    boxShadow: "0 15px 50px rgba(0,0,0,0.25)",
+    boxShadow:
+      "0 15px 50px rgba(0,0,0,0.25)",
   },
 
   modalHeader: {
@@ -1936,4 +3053,3 @@ const styles = {
 };
 
 export default MyApplications;
-
