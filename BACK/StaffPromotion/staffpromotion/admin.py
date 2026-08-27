@@ -17,79 +17,7 @@ from .models import (
     ReviewerAssignment,
 )
 
-# ============================================================
-# 13. PROMOTION NOTIFICATION
-# ============================================================
 
-@admin.register(PromotionNotification)
-class PromotionNotificationAdmin(admin.ModelAdmin):
-
-    list_display = (
-        "id",
-        "employee",
-        "application",
-        "notification_type",
-        "title",
-        "is_read",
-        "created_at",
-    )
-
-    list_filter = (
-        "notification_type",
-        "is_read",
-        "created_at",
-    )
-
-    search_fields = (
-        "employee__first_name",
-        "employee__last_name",
-        "employee__email",
-        "title",
-        "message",
-    )
-
-    ordering = (
-        "-created_at",
-    )
-
-    readonly_fields = (
-        "created_at",
-    )
-
-    fieldsets = (
-
-        (
-            "Notification Recipient",
-            {
-                "fields": (
-                    "employee",
-                    "application",
-                )
-            },
-        ),
-
-        (
-            "Notification Details",
-            {
-                "fields": (
-                    "notification_type",
-                    "title",
-                    "message",
-                )
-            },
-        ),
-
-        (
-            "Notification Status",
-            {
-                "fields": (
-                    "is_read",
-                    "created_at",
-                )
-            },
-        ),
-    )
-    
 # ============================================================
 # 1. DEPARTMENT
 # ============================================================
@@ -100,6 +28,7 @@ class DepartmentAdmin(admin.ModelAdmin):
     list_display = (
         "id",
         "department_name",
+        "created_at",
     )
 
     search_fields = (
@@ -108,6 +37,10 @@ class DepartmentAdmin(admin.ModelAdmin):
 
     ordering = (
         "department_name",
+    )
+
+    readonly_fields = (
+        "created_at",
     )
 
 
@@ -124,6 +57,7 @@ class JobTitleAdmin(admin.ModelAdmin):
         "salary_scale",
         "min_years_required",
         "min_appraisal_score",
+        "created_at",
     )
 
     list_filter = (
@@ -137,6 +71,10 @@ class JobTitleAdmin(admin.ModelAdmin):
 
     ordering = (
         "title_name",
+    )
+
+    readonly_fields = (
+        "created_at",
     )
 
 
@@ -326,8 +264,10 @@ class StudentTeachingEvaluationAdmin(admin.ModelAdmin):
     search_fields = (
         "student__first_name",
         "student__last_name",
+        "student__email",
         "instructor__first_name",
         "instructor__last_name",
+        "instructor__email",
         "course_code",
         "course_name",
     )
@@ -352,6 +292,7 @@ class PeerReviewAdmin(admin.ModelAdmin):
         "id",
         "reviewer",
         "instructor",
+        "department",
         "academic_rank",
         "course_code",
         "course_name",
@@ -370,8 +311,10 @@ class PeerReviewAdmin(admin.ModelAdmin):
     search_fields = (
         "reviewer__first_name",
         "reviewer__last_name",
+        "reviewer__email",
         "instructor__first_name",
         "instructor__last_name",
+        "instructor__email",
         "course_code",
         "course_name",
     )
@@ -388,42 +331,37 @@ class PeerReviewAdmin(admin.ModelAdmin):
 # ============================================================
 # 6. PROMOTION APPLICATION
 # ============================================================
-#
-# IMPORTANT:
-# This admin intentionally DOES NOT reference:
-#
-# created_at
-# updated_at
-# submitted_at
-# status
-# total_points
-# points_required
-# points_difference
-# applicant_declaration
-#
-# because Django reported that these fields are not currently
-# present in your actual PromotionApplication model.
-#
-# ============================================================
 
 @admin.register(PromotionApplication)
 class PromotionApplicationAdmin(admin.ModelAdmin):
 
+    # --------------------------------------------------------
+    # LIST PAGE
+    # --------------------------------------------------------
+
     list_display = (
         "id",
+        "full_name",
         "employee",
         "current_title",
         "targeted_title",
+        "status",
+        "total_points",
+        "points_required",
+        "created_at",
     )
 
     list_filter = (
+        "status",
         "current_title",
         "targeted_title",
         "applied_same_rank_before",
         "intends_new_publications",
+        "created_at",
     )
 
     search_fields = (
+        "full_name",
         "employee__first_name",
         "employee__last_name",
         "employee__email",
@@ -434,27 +372,42 @@ class PromotionApplicationAdmin(admin.ModelAdmin):
     )
 
     ordering = (
-        "-id",
+        "-created_at",
     )
+
+    # --------------------------------------------------------
+    # READ ONLY FIELDS
+    # --------------------------------------------------------
+
+    readonly_fields = (
+        "submitted_at",
+        "created_at",
+        "updated_at",
+    )
+
+    # --------------------------------------------------------
+    # FORM SECTIONS
+    # --------------------------------------------------------
 
     fieldsets = (
 
-        # ----------------------------------------------------
+        # ====================================================
         # APPLICANT
-        # ----------------------------------------------------
+        # ====================================================
 
         (
             "Applicant",
             {
                 "fields": (
                     "employee",
+                    "full_name",
                 )
             },
         ),
 
-        # ----------------------------------------------------
-        # PRESENT AND TARGET POSITION
-        # ----------------------------------------------------
+        # ====================================================
+        # PROMOTION POSITION
+        # ====================================================
 
         (
             "Promotion Position",
@@ -462,13 +415,15 @@ class PromotionApplicationAdmin(admin.ModelAdmin):
                 "fields": (
                     "current_title",
                     "targeted_title",
+                    "present_position",
+                    "position_applied_for",
                 )
             },
         ),
 
-        # ----------------------------------------------------
+        # ====================================================
         # PERSONAL PARTICULARS
-        # ----------------------------------------------------
+        # ====================================================
 
         (
             "Personal Particulars",
@@ -479,16 +434,14 @@ class PromotionApplicationAdmin(admin.ModelAdmin):
                     "date_of_appointment_at_suza",
                     "position_at_first_appointment",
                     "employment_status",
-                    "present_position",
                     "date_of_current_position",
-                    "position_applied_for",
                 )
             },
         ),
 
-        # ----------------------------------------------------
-        # PREVIOUS APPLICATION
-        # ----------------------------------------------------
+        # ====================================================
+        # PREVIOUS PROMOTION
+        # ====================================================
 
         (
             "Previous Promotion Application",
@@ -501,9 +454,9 @@ class PromotionApplicationAdmin(admin.ModelAdmin):
             },
         ),
 
-        # ----------------------------------------------------
-        # DOCUMENTS
-        # ----------------------------------------------------
+        # ====================================================
+        # SUPPORTING DOCUMENTS
+        # ====================================================
 
         (
             "Supporting Documents",
@@ -514,18 +467,156 @@ class PromotionApplicationAdmin(admin.ModelAdmin):
                 )
             },
         ),
+
+        # ====================================================
+        # APPLICATION WORKFLOW
+        # ====================================================
+
+        (
+            "Application Workflow",
+            {
+                "fields": (
+                    "status",
+                    "hod",
+                    "dean",
+                    "assigned_reviewer",
+                )
+            },
+        ),
+
+        # ====================================================
+        # HOD REVIEW
+        # ====================================================
+
+        (
+            "HOD Review",
+            {
+                "fields": (
+                    "hod_recommendation",
+                    "hod_comments",
+                    "hod_reviewed_at",
+                )
+            },
+        ),
+
+        # ====================================================
+        # DEAN REVIEW
+        # ====================================================
+
+        (
+            "Dean Review",
+            {
+                "fields": (
+                    "dean_recommendation",
+                    "dean_comments",
+                    "dean_reviewed_at",
+                )
+            },
+        ),
+
+        # ====================================================
+        # PROMOTION COMMITTEE
+        # ====================================================
+
+        (
+            "Promotion Committee",
+            {
+                "fields": (
+                    "committee_decision",
+                    "committee_comments",
+                    "committee_decided_at",
+                )
+            },
+        ),
+
+        # ====================================================
+        # PROMOTION POINTS
+        # ====================================================
+
+        (
+            "Promotion Points",
+            {
+                "fields": (
+                    "journal_book_points",
+                    "other_publication_points",
+                    "teaching_points",
+                    "total_points",
+                    "points_required",
+                    "points_difference",
+                )
+            },
+        ),
+
+        # ====================================================
+        # APPLICANT DECLARATION
+        # ====================================================
+
+        (
+            "Applicant Declaration",
+            {
+                "fields": (
+                    "applicant_declaration",
+                    "applicant_signature_date",
+                )
+            },
+        ),
+
+        # ====================================================
+        # SYSTEM INFORMATION
+        # ====================================================
+
+        (
+            "System Information",
+            {
+                "fields": (
+                    "submitted_at",
+                    "created_at",
+                    "updated_at",
+                )
+            },
+        ),
     )
+
+    # --------------------------------------------------------
+    # SAVE OVERRIDE
+    # Automatically record committee decision date
+    # --------------------------------------------------------
+
+    def save_model(self, request, obj, form, change):
+
+        from django.utils import timezone
+
+        if change:
+
+            old_obj = PromotionApplication.objects.get(
+                pk=obj.pk
+            )
+
+            # Committee has entered a decision
+            if (
+                obj.committee_decision
+                and not old_obj.committee_decision
+            ):
+                obj.committee_decided_at = timezone.now()
+
+            # Committee changes an existing decision
+            elif (
+                obj.committee_decision
+                and obj.committee_decision
+                != old_obj.committee_decision
+            ):
+                obj.committee_decided_at = timezone.now()
+
+        super().save_model(
+            request,
+            obj,
+            form,
+            change
+        )
 
 
 # ============================================================
 # 7. PROMOTION MATERIAL / CHECKLIST
-# ============================================================
-#
-# This is now your checklist.
-#
-# Staff/reviewer enters POINTS for each material.
-# No checklist PDF is required.
-#
 # ============================================================
 
 @admin.register(PromotionMaterial)
@@ -547,17 +638,53 @@ class PromotionMaterialAdmin(admin.ModelAdmin):
 
     search_fields = (
         "application__full_name",
+        "application__employee__first_name",
+        "application__employee__last_name",
         "application__employee__email",
         "material_type",
+    )
+
+    ordering = (
+        "-created_at",
     )
 
     readonly_fields = (
         "created_at",
     )
 
-    ordering = (
-        "-created_at",
+    fieldsets = (
+
+        (
+            "Promotion Application",
+            {
+                "fields": (
+                    "application",
+                )
+            },
+        ),
+
+        (
+            "Material",
+            {
+                "fields": (
+                    "material_type",
+                    "points",
+                    "document",
+                )
+            },
+        ),
+
+        (
+            "System Information",
+            {
+                "fields": (
+                    "created_at",
+                )
+            },
+        ),
     )
+
+
 # ============================================================
 # 8. ACADEMIC MATERIAL REVIEW
 # ============================================================
@@ -582,9 +709,10 @@ class AcademicMaterialReviewAdmin(admin.ModelAdmin):
     )
 
     search_fields = (
-        "material__title",
+        "material__material_type",
         "reviewer__first_name",
         "reviewer__last_name",
+        "reviewer__email",
         "reviewer_name",
         "reviewer_affiliation",
     )
@@ -599,6 +727,10 @@ class AcademicMaterialReviewAdmin(admin.ModelAdmin):
 
     fieldsets = (
 
+        # ----------------------------------------------------
+        # MATERIAL
+        # ----------------------------------------------------
+
         (
             "Material",
             {
@@ -607,6 +739,10 @@ class AcademicMaterialReviewAdmin(admin.ModelAdmin):
                 )
             },
         ),
+
+        # ----------------------------------------------------
+        # REVIEWER
+        # ----------------------------------------------------
 
         (
             "Reviewer",
@@ -619,6 +755,10 @@ class AcademicMaterialReviewAdmin(admin.ModelAdmin):
                 )
             },
         ),
+
+        # ----------------------------------------------------
+        # REVIEW CRITERIA
+        # ----------------------------------------------------
 
         (
             "Review Criteria",
@@ -635,6 +775,10 @@ class AcademicMaterialReviewAdmin(admin.ModelAdmin):
             },
         ),
 
+        # ----------------------------------------------------
+        # OVERALL ASSESSMENT
+        # ----------------------------------------------------
+
         (
             "Overall Assessment",
             {
@@ -647,6 +791,10 @@ class AcademicMaterialReviewAdmin(admin.ModelAdmin):
                 )
             },
         ),
+
+        # ----------------------------------------------------
+        # SIGNATURE
+        # ----------------------------------------------------
 
         (
             "Signature",
@@ -661,80 +809,69 @@ class AcademicMaterialReviewAdmin(admin.ModelAdmin):
 
 
 # ============================================================
-# 9. PROMOTION APPEAL
+# 9. REVIEWER ASSIGNMENT
 # ============================================================
 
-@admin.register(PromotionAppeal)
-class PromotionAppealAdmin(admin.ModelAdmin):
+@admin.register(ReviewerAssignment)
+class ReviewerAssignmentAdmin(admin.ModelAdmin):
 
     list_display = (
         "id",
         "application",
-        "applicant",
-        "department",
-        "position",
-        "status",
-        "received_at",
-        "decided_at",
+        "reviewer",
+        "assigned_by",
+        "assigned_at",
+        "completed",
+        "completed_at",
     )
 
     list_filter = (
-        "status",
-        "department",
-        "position",
+        "completed",
+        "assigned_at",
+        "completed_at",
     )
 
     search_fields = (
-        "applicant__first_name",
-        "applicant__last_name",
-        "applicant__email",
-        "decisions_disagreed_with",
-        "reasons_for_disagreement",
+        "reviewer__first_name",
+        "reviewer__last_name",
+        "reviewer__email",
+        "assigned_by__first_name",
+        "assigned_by__last_name",
+        "assigned_by__email",
+        "application__full_name",
+        "application__employee__first_name",
+        "application__employee__last_name",
     )
 
     ordering = (
-        "-received_at",
+        "-assigned_at",
     )
 
     readonly_fields = (
-        "received_at",
-        "decided_at",
+        "assigned_at",
+        "completed_at",
     )
 
     fieldsets = (
 
         (
-            "Appeal Application",
+            "Assignment",
             {
                 "fields": (
                     "application",
-                    "applicant",
-                    "department",
-                    "position",
-                    "date_of_appointment_at_position",
+                    "reviewer",
+                    "assigned_by",
                 )
             },
         ),
 
         (
-            "Appeal Details",
+            "Assignment Status",
             {
                 "fields": (
-                    "decisions_disagreed_with",
-                    "reasons_for_disagreement",
-                    "self_rating",
-                    "applicant_signature_date",
-                )
-            },
-        ),
-
-        (
-            "Appeal Committee",
-            {
-                "fields": (
-                    "appeal_committee_comments",
-                    "appeal_decision",
-                    "status",
+                    "completed",
+                    "completed_at",
+                    "comments",
                 )
             },
         ),
@@ -743,8 +880,7 @@ class PromotionAppealAdmin(admin.ModelAdmin):
             "System Information",
             {
                 "fields": (
-                    "received_at",
-                    "decided_at",
+                    "assigned_at",
                 )
             },
         ),
@@ -752,7 +888,86 @@ class PromotionAppealAdmin(admin.ModelAdmin):
 
 
 # ============================================================
-# 10. PROMOTION HISTORY
+# 10. PROMOTION NOTIFICATION
+# ============================================================
+
+@admin.register(PromotionNotification)
+class PromotionNotificationAdmin(admin.ModelAdmin):
+
+    list_display = (
+        "id",
+        "employee",
+        "application",
+        "notification_type",
+        "title",
+        "status",
+        "is_read",
+        "created_at",
+    )
+
+    list_filter = (
+        "notification_type",
+        "status",
+        "is_read",
+        "created_at",
+    )
+
+    search_fields = (
+        "employee__first_name",
+        "employee__last_name",
+        "employee__email",
+        "title",
+        "message",
+    )
+
+    ordering = (
+        "-created_at",
+    )
+
+    readonly_fields = (
+        "created_at",
+        "read_at",
+    )
+
+    fieldsets = (
+
+        (
+            "Notification Recipient",
+            {
+                "fields": (
+                    "employee",
+                    "application",
+                )
+            },
+        ),
+
+        (
+            "Notification Details",
+            {
+                "fields": (
+                    "notification_type",
+                    "title",
+                    "message",
+                    "status",
+                )
+            },
+        ),
+
+        (
+            "Notification Status",
+            {
+                "fields": (
+                    "is_read",
+                    "read_at",
+                    "created_at",
+                )
+            },
+        ),
+    )
+
+
+# ============================================================
+# 11. PROMOTION HISTORY
 # ============================================================
 
 @admin.register(PromotionHistory)
@@ -761,6 +976,7 @@ class PromotionHistoryAdmin(admin.ModelAdmin):
     list_display = (
         "id",
         "employee",
+        "application",
         "old_title",
         "new_title",
         "approval_date",
@@ -790,9 +1006,189 @@ class PromotionHistoryAdmin(admin.ModelAdmin):
         "created_at",
     )
 
+    fieldsets = (
+
+        (
+            "Promotion",
+            {
+                "fields": (
+                    "employee",
+                    "application",
+                    "old_title",
+                    "new_title",
+                    "approval_date",
+                )
+            },
+        ),
+
+        (
+            "Promotion Letter",
+            {
+                "fields": (
+                    "promotion_letter",
+                    "comments",
+                )
+            },
+        ),
+
+        (
+            "System Information",
+            {
+                "fields": (
+                    "created_at",
+                )
+            },
+        ),
+    )
+
 
 # ============================================================
-# 11. SYSTEM LOG
+# 12. PROMOTION APPEAL
+# ============================================================
+
+@admin.register(PromotionAppeal)
+class PromotionAppealAdmin(admin.ModelAdmin):
+
+    list_display = (
+        "id",
+        "application",
+        "applicant",
+        "department",
+        "position",
+        "status",
+        "received_at",
+        "decided_at",
+    )
+
+    list_filter = (
+        "status",
+        "department",
+        "position",
+        "received_at",
+    )
+
+    search_fields = (
+        "applicant__first_name",
+        "applicant__last_name",
+        "applicant__email",
+        "application__full_name",
+        "decisions_disagreed_with",
+        "reasons_for_disagreement",
+        "appeal_decision",
+    )
+
+    ordering = (
+        "-received_at",
+    )
+
+    readonly_fields = (
+        "received_at",
+        "decided_at",
+    )
+
+    fieldsets = (
+
+        # ----------------------------------------------------
+        # APPEAL APPLICATION
+        # ----------------------------------------------------
+
+        (
+            "Appeal Application",
+            {
+                "fields": (
+                    "application",
+                    "applicant",
+                    "department",
+                    "position",
+                    "date_of_appointment_at_position",
+                )
+            },
+        ),
+
+        # ----------------------------------------------------
+        # APPLICANT APPEAL
+        # ----------------------------------------------------
+
+        (
+            "Appeal Details",
+            {
+                "fields": (
+                    "decisions_disagreed_with",
+                    "reasons_for_disagreement",
+                    "self_rating",
+                    "applicant_signature_date",
+                )
+            },
+        ),
+
+        # ----------------------------------------------------
+        # APPEAL COMMITTEE
+        # ----------------------------------------------------
+
+        (
+            "Appeal Committee",
+            {
+                "fields": (
+                    "appeal_committee_comments",
+                    "appeal_decision",
+                    "status",
+                )
+            },
+        ),
+
+        # ----------------------------------------------------
+        # SYSTEM INFORMATION
+        # ----------------------------------------------------
+
+        (
+            "System Information",
+            {
+                "fields": (
+                    "received_at",
+                    "decided_at",
+                )
+            },
+        ),
+    )
+
+    # --------------------------------------------------------
+    # AUTOMATIC APPEAL DECISION DATE
+    # --------------------------------------------------------
+
+    def save_model(self, request, obj, form, change):
+
+        from django.utils import timezone
+
+        if change:
+
+            old_obj = PromotionAppeal.objects.get(
+                pk=obj.pk
+            )
+
+            # Appeal committee has made a decision
+            if (
+                obj.status in ["UPHELD", "REJECTED"]
+                and old_obj.status not in ["UPHELD", "REJECTED"]
+            ):
+                obj.decided_at = timezone.now()
+
+            # Decision changed
+            elif (
+                obj.status in ["UPHELD", "REJECTED"]
+                and obj.status != old_obj.status
+            ):
+                obj.decided_at = timezone.now()
+
+        super().save_model(
+            request,
+            obj,
+            form,
+            change
+        )
+
+
+# ============================================================
+# 13. SYSTEM LOG
 # ============================================================
 
 @admin.register(SystemLog)
@@ -830,47 +1226,4 @@ class SystemLogAdmin(admin.ModelAdmin):
         "description",
         "ip_address",
         "created_at",
-    )
-
-
-# ============================================================
-# 12. REVIEWER ASSIGNMENT
-# ============================================================
-
-@admin.register(ReviewerAssignment)
-class ReviewerAssignmentAdmin(admin.ModelAdmin):
-
-    list_display = (
-        "id",
-        "application",
-        "reviewer",
-        "assigned_by",
-        "assigned_at",
-        "completed",
-        "completed_at",
-    )
-
-    list_filter = (
-        "completed",
-        "assigned_at",
-        "completed_at",
-    )
-
-    search_fields = (
-        "reviewer__first_name",
-        "reviewer__last_name",
-        "reviewer__email",
-        "assigned_by__first_name",
-        "assigned_by__last_name",
-        "application__employee__first_name",
-        "application__employee__last_name",
-    )
-
-    ordering = (
-        "-assigned_at",
-    )
-
-    readonly_fields = (
-        "assigned_at",
-        "completed_at",
     )

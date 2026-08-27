@@ -788,11 +788,17 @@ class PromotionApplication(models.Model):
     # COMMITTEE
     # ========================================================
 
-    committee_decision = models.TextField(
+    COMMITTEE_DECISION_CHOICES = (
+    ("APPROVED", "Approved"),
+    ("REJECTED", "Rejected"),
+    )
+
+    committee_decision = models.CharField(
+        max_length=20,
+        choices=COMMITTEE_DECISION_CHOICES,
         blank=True,
         null=True
     )
-
     committee_comments = models.TextField(
         blank=True,
         null=True
