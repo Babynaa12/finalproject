@@ -885,6 +885,34 @@ class PromotionApplication(models.Model):
             f"{self.targeted_title.title_name}"
         )
 
+    @property
+    def reviewer_stage_completed(self):
+        return (
+            self.status in [
+                "COMMITTEE_REVIEW",
+                "APPROVED",
+                "REJECTED",
+                "APPEALED",
+            ]
+            and self.assigned_reviewer_id is not None
+        )
+
+    @property
+    def student_evaluation_stage_completed(self):
+        return self.status in [
+            "COMMITTEE_REVIEW",
+            "APPROVED",
+            "REJECTED",
+            "APPEALED",
+        ]
+
+    @property
+    def ready_for_committee(self):
+        return (
+            self.reviewer_stage_completed
+            and self.student_evaluation_stage_completed
+        )
+
 
 # ============================================================
 # 7. PROMOTION MATERIAL / CHECKLIST

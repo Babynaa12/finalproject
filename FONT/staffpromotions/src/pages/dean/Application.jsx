@@ -217,10 +217,24 @@ function Application() {
     let result = [...applications];
 
     // ----------------------------------------------------------
-    // ONLY APPLICATIONS THAT REACHED DEAN
+    // APPLICATIONS THAT REACHED DEAN OR WITH PENDING DEAN STATUS
     // ----------------------------------------------------------
 
-    result = result.filter((app) => hasReachedDean(app));
+    result = result.filter((app) => {
+      const deanStatus = normalize(getDeanStatus(app));
+      const appStatus = normalize(app.status);
+
+      return (
+        hasReachedDean(app) ||
+        deanStatus.includes("pending") ||
+        deanStatus.includes("waiting") ||
+        deanStatus.includes("draft") ||
+        deanStatus === "" ||
+        appStatus.includes("pending") ||
+        appStatus.includes("draft") ||
+        appStatus.includes("dean review")
+      );
+    });
 
     // ----------------------------------------------------------
     // SEARCH

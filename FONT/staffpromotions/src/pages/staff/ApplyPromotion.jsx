@@ -6,7 +6,15 @@ function ApplyPromotion() {
   // LOGGED-IN EMPLOYEE
   // ============================================================
 
-  const user = JSON.parse(localStorage.getItem("user") || "{}");
+  const getLoggedInUser = () => {
+    try {
+      return JSON.parse(localStorage.getItem("user") || "{}");
+    } catch {
+      return {};
+    }
+  };
+
+  const user = getLoggedInUser();
 
   const employeeId =
     user?.id ||
@@ -27,11 +35,11 @@ function ApplyPromotion() {
   const [loadingTitles, setLoadingTitles] = useState(true);
 
   // ============================================================
-  // PERSONAL / PROMOTION INFORMATION
+  // FORM
   // ============================================================
 
-  const [form, setForm] = useState({
-    current_title: "",
+  const getInitialForm = () => ({
+    current_title: user?.job_title ? String(user.job_title) : "",
     targeted_title: "",
 
     full_name: fullName,
@@ -39,10 +47,15 @@ function ApplyPromotion() {
     date_of_birth: "",
     nationality: "",
     date_of_appointment_at_suza: "",
-    position_at_first_appointment: "",
-    employment_status: "",
-    present_position: "",
-    date_of_current_position: "",
+    position_at_first_appointment: user?.first_appointment_position
+      ? String(user.first_appointment_position)
+      : "",
+    employment_status: user?.employment_status || "",
+    present_position: user?.job_title
+      ? String(user.job_title)
+      : "",
+    date_of_current_position:
+      user?.current_position_appointment_date || "",
 
     applied_same_rank_before: "",
     previous_application_date: "",
@@ -52,16 +65,18 @@ function ApplyPromotion() {
     applicant_signature_date: "",
   });
 
+  const [form, setForm] = useState(getInitialForm);
+
   // ============================================================
   // MAIN DOCUMENTS
   // ============================================================
 
   const [cv, setCv] = useState(null);
-  const [additionalDocuments, setAdditionalDocuments] = useState(null);
+  const [additionalDocuments, setAdditionalDocuments] =
+    useState(null);
 
   // ============================================================
   // PROMOTION MATERIALS
-  // ONLY SCORE + DOCUMENT
   // ============================================================
 
   const initialMaterials = [
@@ -152,10 +167,11 @@ function ApplyPromotion() {
     },
   ];
 
-  const [materials, setMaterials] = useState(initialMaterials);
+  const [materials, setMaterials] =
+    useState(initialMaterials);
 
   // ============================================================
-  // UI STATES
+  // UI
   // ============================================================
 
   const [loading, setLoading] = useState(false);
@@ -185,7 +201,10 @@ function ApplyPromotion() {
 
       setJobTitles(response.data || []);
     } catch (err) {
-      console.error("Failed to load job titles:", err);
+      console.error(
+        "Failed to load job titles:",
+        err.response?.data || err
+      );
 
       setError(
         err.response?.data?.detail ||
@@ -197,7 +216,7 @@ function ApplyPromotion() {
   };
 
   // ============================================================
-  // HANDLE FORM CHANGE
+  // FORM CHANGE
   // ============================================================
 
   const handleChange = (e) => {
@@ -215,14 +234,19 @@ function ApplyPromotion() {
           ? checked
           : value,
     }));
+
+    setError("");
   };
 
   // ============================================================
-  // HANDLE MATERIAL POINTS
+  // MATERIAL POINTS
   // ============================================================
 
   const handleMaterialPoints = (index, value) => {
-    if (value !== "" && Number(value) < 0) {
+    if (
+      value !== "" &&
+      Number(value) < 0
+    ) {
       return;
     }
 
@@ -236,28 +260,41 @@ function ApplyPromotion() {
           : material
       )
     );
+
+    setError("");
   };
 
   // ============================================================
-  // HANDLE MATERIAL DOCUMENT
+  // MATERIAL DOCUMENT
   // ============================================================
 
-  const handleMaterialDocument = (index, file) => {
+  const handleMaterialDocument = (
+    index,
+    file
+  ) => {
     if (!file) {
       return;
     }
 
-    if (file.type !== "application/pdf") {
-      setError("Only PDF files are allowed.");
+    if (
+      file.type !==
+      "application/pdf"
+    ) {
+      setError(
+        "Only PDF files are allowed."
+      );
       return;
     }
 
-    if (file.size > 10 * 1024 * 1024) {
-      setError("Each PDF file must not exceed 10 MB.");
+    if (
+      file.size >
+      10 * 1024 * 1024
+    ) {
+      setError(
+        "Each PDF file must not exceed 10 MB."
+      );
       return;
     }
-
-    setError("");
 
     setMaterials((prev) =>
       prev.map((material, i) =>
@@ -269,74 +306,98 @@ function ApplyPromotion() {
           : material
       )
     );
-  };
-
-  // ============================================================
-  // TOTAL POINTS
-  // ============================================================
-
-  const totalMaterialPoints = materials.reduce(
-    (total, material) => {
-      const points = parseFloat(material.points);
-
-      return (
-        total +
-        (isNaN(points) ? 0 : points)
-      );
-    },
-    0
-  );
-
-  // ============================================================
-  // HANDLE MAIN FILES
-  // ============================================================
-
-  const handleFileChange = (setter) => (e) => {
-    const file = e.target.files?.[0];
-
-    if (!file) {
-      setter(null);
-      return;
-    }
-
-    if (file.type !== "application/pdf") {
-      setError("Only PDF files are allowed.");
-      e.target.value = "";
-      setter(null);
-      return;
-    }
-
-    if (file.size > 10 * 1024 * 1024) {
-      setError(
-        "File size must not exceed 10 MB."
-      );
-      e.target.value = "";
-      setter(null);
-      return;
-    }
 
     setError("");
-    setter(file);
   };
+
+  // ============================================================
+  // TOTAL MATERIAL POINTS
+  // DISPLAY ONLY
+  // Backend should be responsible for final calculation.
+  // ============================================================
+
+  const totalMaterialPoints =
+    materials.reduce(
+      (total, material) => {
+        const points = parseFloat(
+          material.points
+        );
+
+        return (
+          total +
+          (Number.isNaN(points)
+            ? 0
+            : points)
+        );
+      },
+      0
+    );
+
+  // ============================================================
+  // MAIN FILE VALIDATION
+  // ============================================================
+
+  const handleFileChange =
+    (setter) =>
+    (e) => {
+      const file =
+        e.target.files?.[0];
+
+      if (!file) {
+        setter(null);
+        return;
+      }
+
+      if (
+        file.type !==
+        "application/pdf"
+      ) {
+        setError(
+          "Only PDF files are allowed."
+        );
+
+        e.target.value = "";
+        setter(null);
+
+        return;
+      }
+
+      if (
+        file.size >
+        10 * 1024 * 1024
+      ) {
+        setError(
+          "File size must not exceed 10 MB."
+        );
+
+        e.target.value = "";
+        setter(null);
+
+        return;
+      }
+
+      setter(file);
+      setError("");
+    };
 
   // ============================================================
   // VALIDATION
   // ============================================================
 
   const validateForm = () => {
-    // Employee
     if (!employeeId) {
       setError(
         "Employee information was not found. Please logout and login again."
       );
+
       return false;
     }
 
-    // Position
     if (!form.current_title) {
       setError(
         "Please select your current position."
       );
+
       return false;
     }
 
@@ -344,22 +405,46 @@ function ApplyPromotion() {
       setError(
         "Please select the position you are applying for."
       );
+
       return false;
     }
 
-    // CV
+    if (
+      String(form.current_title) ===
+      String(form.targeted_title)
+    ) {
+      setError(
+        "Current position and target position cannot be the same."
+      );
+
+      return false;
+    }
+
     if (!cv) {
       setError(
         "Please upload your Curriculum Vitae (CV)."
       );
+
       return false;
     }
 
-    // Declaration
-    if (!form.applicant_declaration) {
+    if (
+      !form.applicant_declaration
+    ) {
       setError(
         "You must accept the applicant declaration before submitting."
       );
+
+      return false;
+    }
+
+    if (
+      form.applicant_signature_date === ""
+    ) {
+      setError(
+        "Please provide the declaration signature date."
+      );
+
       return false;
     }
 
@@ -367,10 +452,78 @@ function ApplyPromotion() {
   };
 
   // ============================================================
-  // SUBMIT PROMOTION
+  // RESET FORM
   // ============================================================
 
-  const submitApplication = async (e) => {
+  const resetForm = () => {
+    setForm({
+      current_title: user?.job_title
+        ? String(user.job_title)
+        : "",
+
+      targeted_title: "",
+
+      full_name: fullName,
+
+      date_of_birth: "",
+      nationality: "",
+      date_of_appointment_at_suza: "",
+      position_at_first_appointment:
+        user?.first_appointment_position
+          ? String(
+              user.first_appointment_position
+            )
+          : "",
+
+      employment_status:
+        user?.employment_status || "",
+
+      present_position:
+        user?.job_title
+          ? String(user.job_title)
+          : "",
+
+      date_of_current_position:
+        user?.current_position_appointment_date ||
+        "",
+
+      applied_same_rank_before: "",
+      previous_application_date: "",
+      intends_new_publications: "",
+
+      applicant_declaration: false,
+      applicant_signature_date: "",
+    });
+
+    setCv(null);
+    setAdditionalDocuments(null);
+
+    setMaterials(
+      initialMaterials.map(
+        (material) => ({
+          ...material,
+          points: "",
+          document: null,
+        })
+      )
+    );
+
+    document
+      .querySelectorAll(
+        'input[type="file"]'
+      )
+      .forEach((input) => {
+        input.value = "";
+      });
+  };
+
+  // ============================================================
+  // SUBMIT APPLICATION
+  // ============================================================
+
+  const submitApplication = async (
+    e
+  ) => {
     e.preventDefault();
 
     setSuccess("");
@@ -386,15 +539,25 @@ function ApplyPromotion() {
       const token =
         localStorage.getItem("token");
 
-      const data = new FormData();
+      if (!token) {
+        throw new Error(
+          "Authentication token not found."
+        );
+      }
+
+      const data =
+        new FormData();
 
       // ========================================================
-      // EMPLOYEE
+      // IMPORTANT:
+      // Only this employee is submitting this application.
+      // No academic evaluation or previous application data
+      // is sent from this page.
       // ========================================================
 
       data.append(
         "employee",
-        employeeId
+        String(employeeId)
       );
 
       // ========================================================
@@ -403,12 +566,12 @@ function ApplyPromotion() {
 
       data.append(
         "current_title",
-        form.current_title
+        String(form.current_title)
       );
 
       data.append(
         "targeted_title",
-        form.targeted_title
+        String(form.targeted_title)
       );
 
       // ========================================================
@@ -417,7 +580,7 @@ function ApplyPromotion() {
 
       data.append(
         "full_name",
-        form.full_name
+        form.full_name || fullName
       );
 
       if (form.date_of_birth) {
@@ -448,7 +611,9 @@ function ApplyPromotion() {
       ) {
         data.append(
           "position_at_first_appointment",
-          form.position_at_first_appointment
+          String(
+            form.position_at_first_appointment
+          )
         );
       }
 
@@ -462,7 +627,9 @@ function ApplyPromotion() {
       if (form.present_position) {
         data.append(
           "present_position",
-          form.present_position
+          String(
+            form.present_position
+          )
         );
       }
 
@@ -521,37 +688,69 @@ function ApplyPromotion() {
 
       // ========================================================
       // PROMOTION MATERIALS
-      // SCORE + DOCUMENT
+      //
+      // IMPORTANT:
+      // We send a JSON description of the selected materials.
+      // Files are sent separately.
+      //
+      // This avoids:
+      // promotion_materials[0][material_type]
+      // promotion_materials[0][points]
+      // promotion_materials[0][document]
+      //
+      // which DRF multipart parsing does not handle reliably.
       // ========================================================
 
       const selectedMaterials =
-        materials.filter(
-          (material) =>
-            material.points !== "" ||
-            material.document !== null
+        materials
+          .map(
+            (material, index) => ({
+              ...material,
+              originalIndex: index,
+            })
+          )
+          .filter(
+            (material) =>
+              material.points !== "" ||
+              material.document !== null
+          );
+
+      const materialData =
+        selectedMaterials.map(
+          (material) => ({
+            material_type:
+              material.material_type,
+
+            points:
+              material.points === ""
+                ? "0"
+                : material.points,
+
+            file_index:
+              material.document
+                ? material.originalIndex
+                : null,
+          })
         );
 
-      /*
-       * Send material information.
-       */
+      data.append(
+        "promotion_materials",
+        JSON.stringify(materialData)
+      );
+
+      // ========================================================
+      // SEND MATERIAL FILES SEPARATELY
+      //
+      // Example:
+      // material_document_0
+      // material_document_1
+      // ========================================================
 
       selectedMaterials.forEach(
-        (material, index) => {
-          data.append(
-            `promotion_materials[${index}][material_type]`,
-            material.material_type
-          );
-
-          data.append(
-            `promotion_materials[${index}][points]`,
-            material.points === ""
-              ? "0"
-              : material.points
-          );
-
+        (material) => {
           if (material.document) {
             data.append(
-              `promotion_materials[${index}][document]`,
+              `material_document_${material.originalIndex}`,
               material.document
             );
           }
@@ -559,16 +758,13 @@ function ApplyPromotion() {
       );
 
       // ========================================================
-      // TOTAL POINTS
-      // ========================================================
-
-      data.append(
-        "other_publication_points",
-        totalMaterialPoints.toFixed(2)
-      );
-
-      // ========================================================
-      // DECLARATION
+      // DO NOT SEND PREVIOUS ACADEMIC REVIEWS
+      // DO NOT SEND STUDENT EVALUATIONS
+      // DO NOT SEND REVIEW RECORDS
+      //
+      // The application endpoint should only create:
+      // 1. PromotionApplication
+      // 2. PromotionMaterial records
       // ========================================================
 
       data.append(
@@ -578,29 +774,43 @@ function ApplyPromotion() {
           : "false"
       );
 
-      if (
+      data.append(
+        "applicant_signature_date",
         form.applicant_signature_date
-      ) {
-        data.append(
-          "applicant_signature_date",
-          form.applicant_signature_date
+      );
+
+      // ========================================================
+      // DEBUG
+      // ========================================================
+
+      console.log(
+        "Submitting promotion application for employee:",
+        employeeId
+      );
+
+      console.log(
+        "Selected promotion materials:",
+        materialData
+      );
+
+      // ========================================================
+      // POST
+      // ========================================================
+
+      const response =
+        await api.post(
+          "/api/applications/",
+          data,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
         );
-      }
 
-      // ========================================================
-      // SUBMIT
-      // ========================================================
-
-      await api.post(
-        "/api/applications/",
-        data,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type":
-              "multipart/form-data",
-          },
-        }
+      console.log(
+        "Application created:",
+        response.data
       );
 
       // ========================================================
@@ -608,54 +818,19 @@ function ApplyPromotion() {
       // ========================================================
 
       setSuccess(
-        "Promotion application submitted successfully. Please wait for approval."
+        "Promotion application submitted successfully. Please wait for the next stage of review."
       );
 
       // ========================================================
       // RESET
       // ========================================================
 
-      setForm({
-        current_title: "",
-        targeted_title: "",
+      resetForm();
 
-        full_name: fullName,
-
-        date_of_birth: "",
-        nationality: "",
-        date_of_appointment_at_suza: "",
-        position_at_first_appointment: "",
-        employment_status: "",
-        present_position: "",
-        date_of_current_position: "",
-
-        applied_same_rank_before: "",
-        previous_application_date: "",
-        intends_new_publications: "",
-
-        applicant_declaration: false,
-        applicant_signature_date: "",
+      window.scrollTo({
+        top: 0,
+        behavior: "smooth",
       });
-
-      setCv(null);
-      setAdditionalDocuments(null);
-      setMaterials(
-        initialMaterials.map(
-          (material) => ({
-            ...material,
-            points: "",
-            document: null,
-          })
-        )
-      );
-
-      document
-        .querySelectorAll(
-          'input[type="file"]'
-        )
-        .forEach((input) => {
-          input.value = "";
-        });
 
     } catch (err) {
       console.error(
@@ -666,34 +841,55 @@ function ApplyPromotion() {
       const backendError =
         err.response?.data;
 
-      if (backendError) {
-        if (
-          typeof backendError === "object"
-        ) {
-          const messages =
-            Object.entries(
-              backendError
-            )
-              .map(
-                ([field, message]) => {
-                  return `${field}: ${
-                    Array.isArray(message)
-                      ? message.join(", ")
-                      : message
-                  }`;
+      if (
+        backendError &&
+        typeof backendError ===
+          "object"
+      ) {
+        const messages =
+          Object.entries(
+            backendError
+          )
+            .map(
+              ([field, message]) => {
+                if (
+                  Array.isArray(
+                    message
+                  )
+                ) {
+                  return `${field}: ${message.join(
+                    ", "
+                  )}`;
                 }
-              )
-              .join(" | ");
 
-          setError(messages);
-        } else {
-          setError(
-            String(backendError)
-          );
-        }
+                if (
+                  typeof message ===
+                  "object"
+                ) {
+                  return `${field}: ${JSON.stringify(
+                    message
+                  )}`;
+                }
+
+                return `${field}: ${message}`;
+              }
+            )
+            .join(" | ");
+
+        setError(
+          messages ||
+            "Failed to submit promotion application."
+        );
+      } else if (
+        backendError
+      ) {
+        setError(
+          String(backendError)
+        );
       } else {
         setError(
-          "Failed to submit promotion application. Please try again."
+          err.message ||
+            "Failed to submit promotion application. Please try again."
         );
       }
     } finally {
@@ -713,7 +909,6 @@ function ApplyPromotion() {
       ====================================================== */}
 
       <div style={styles.header}>
-
         <h2 style={styles.title}>
           Promotion Application
         </h2>
@@ -723,7 +918,6 @@ function ApplyPromotion() {
           promotion materials, supporting
           documents and declaration.
         </p>
-
       </div>
 
       {/* ======================================================
@@ -751,7 +945,6 @@ function ApplyPromotion() {
       ====================================================== */}
 
       <div style={styles.employeeBox}>
-
         <div>
           <strong>
             Employee:
@@ -765,10 +958,11 @@ function ApplyPromotion() {
           </strong>{" "}
           {employeeId || "Not available"}
         </div>
-
       </div>
 
-      <form onSubmit={submitApplication}>
+      <form
+        onSubmit={submitApplication}
+      >
 
         {/* ====================================================
             SECTION 1
@@ -782,8 +976,9 @@ function ApplyPromotion() {
 
           <div style={styles.grid}>
 
-            <div>
+            {/* CURRENT POSITION */}
 
+            <div>
               <label style={styles.label}>
                 Current Position *
               </label>
@@ -793,14 +988,15 @@ function ApplyPromotion() {
                 value={
                   form.current_title
                 }
-                onChange={handleChange}
+                onChange={
+                  handleChange
+                }
                 required
                 disabled={
                   loadingTitles
                 }
                 style={styles.input}
               >
-
                 <option value="">
                   {loadingTitles
                     ? "Loading positions..."
@@ -819,13 +1015,12 @@ function ApplyPromotion() {
                     </option>
                   )
                 )}
-
               </select>
-
             </div>
 
-            <div>
+            {/* TARGET POSITION */}
 
+            <div>
               <label style={styles.label}>
                 Position Applied For *
               </label>
@@ -835,37 +1030,45 @@ function ApplyPromotion() {
                 value={
                   form.targeted_title
                 }
-                onChange={handleChange}
+                onChange={
+                  handleChange
+                }
                 required
                 disabled={
                   loadingTitles
                 }
                 style={styles.input}
               >
-
                 <option value="">
                   Select Target Position
                 </option>
 
-                {jobTitles.map(
-                  (job) => (
-                    <option
-                      key={job.id}
-                      value={job.id}
-                    >
-                      {
-                        job.title_name
-                      }
-                    </option>
+                {jobTitles
+                  .filter(
+                    (job) =>
+                      String(
+                        job.id
+                      ) !==
+                      String(
+                        form.current_title
+                      )
                   )
-                )}
-
+                  .map(
+                    (job) => (
+                      <option
+                        key={job.id}
+                        value={job.id}
+                      >
+                        {
+                          job.title_name
+                        }
+                      </option>
+                    )
+                  )}
               </select>
-
             </div>
 
           </div>
-
         </div>
 
         {/* ====================================================
@@ -883,7 +1086,6 @@ function ApplyPromotion() {
             {/* FULL NAME */}
 
             <div>
-
               <label style={styles.label}>
                 Full Name
               </label>
@@ -900,13 +1102,11 @@ function ApplyPromotion() {
                     "#f3f4f6",
                 }}
               />
-
             </div>
 
             {/* DATE OF BIRTH */}
 
             <div>
-
               <label style={styles.label}>
                 Date of Birth
               </label>
@@ -917,16 +1117,16 @@ function ApplyPromotion() {
                 value={
                   form.date_of_birth
                 }
-                onChange={handleChange}
+                onChange={
+                  handleChange
+                }
                 style={styles.input}
               />
-
             </div>
 
             {/* NATIONALITY */}
 
             <div>
-
               <label style={styles.label}>
                 Nationality
               </label>
@@ -937,17 +1137,17 @@ function ApplyPromotion() {
                 value={
                   form.nationality
                 }
-                onChange={handleChange}
+                onChange={
+                  handleChange
+                }
                 placeholder="Enter nationality"
                 style={styles.input}
               />
-
             </div>
 
             {/* APPOINTMENT */}
 
             <div>
-
               <label style={styles.label}>
                 Date of Appointment at SUZA
               </label>
@@ -958,16 +1158,16 @@ function ApplyPromotion() {
                 value={
                   form.date_of_appointment_at_suza
                 }
-                onChange={handleChange}
+                onChange={
+                  handleChange
+                }
                 style={styles.input}
               />
-
             </div>
 
             {/* EMPLOYMENT STATUS */}
 
             <div>
-
               <label style={styles.label}>
                 Employment Status
               </label>
@@ -978,17 +1178,17 @@ function ApplyPromotion() {
                 value={
                   form.employment_status
                 }
-                onChange={handleChange}
+                onChange={
+                  handleChange
+                }
                 placeholder="e.g. Permanent"
                 style={styles.input}
               />
-
             </div>
 
-            {/* FIRST POSITION */}
+            {/* FIRST APPOINTMENT */}
 
             <div>
-
               <label style={styles.label}>
                 Position at First Appointment
               </label>
@@ -998,10 +1198,11 @@ function ApplyPromotion() {
                 value={
                   form.position_at_first_appointment
                 }
-                onChange={handleChange}
+                onChange={
+                  handleChange
+                }
                 style={styles.input}
               >
-
                 <option value="">
                   Select Position
                 </option>
@@ -1018,15 +1219,12 @@ function ApplyPromotion() {
                     </option>
                   )
                 )}
-
               </select>
-
             </div>
 
             {/* PRESENT POSITION */}
 
             <div>
-
               <label style={styles.label}>
                 Present Position
               </label>
@@ -1036,10 +1234,11 @@ function ApplyPromotion() {
                 value={
                   form.present_position
                 }
-                onChange={handleChange}
+                onChange={
+                  handleChange
+                }
                 style={styles.input}
               >
-
                 <option value="">
                   Select Position
                 </option>
@@ -1056,15 +1255,12 @@ function ApplyPromotion() {
                     </option>
                   )
                 )}
-
               </select>
-
             </div>
 
             {/* CURRENT POSITION DATE */}
 
             <div>
-
               <label style={styles.label}>
                 Date of Current Position
               </label>
@@ -1075,16 +1271,16 @@ function ApplyPromotion() {
                 value={
                   form.date_of_current_position
                 }
-                onChange={handleChange}
+                onChange={
+                  handleChange
+                }
                 style={styles.input}
               />
-
             </div>
 
             {/* SAME RANK */}
 
             <div>
-
               <label style={styles.label}>
                 Applied for Same Rank Before?
               </label>
@@ -1094,10 +1290,11 @@ function ApplyPromotion() {
                 value={
                   form.applied_same_rank_before
                 }
-                onChange={handleChange}
+                onChange={
+                  handleChange
+                }
                 style={styles.input}
               >
-
                 <option value="">
                   Select
                 </option>
@@ -1109,15 +1306,12 @@ function ApplyPromotion() {
                 <option value="NO">
                   No
                 </option>
-
               </select>
-
             </div>
 
             {/* PREVIOUS APPLICATION */}
 
             <div>
-
               <label style={styles.label}>
                 Previous Application Date
               </label>
@@ -1128,16 +1322,16 @@ function ApplyPromotion() {
                 value={
                   form.previous_application_date
                 }
-                onChange={handleChange}
+                onChange={
+                  handleChange
+                }
                 style={styles.input}
               />
-
             </div>
 
             {/* NEW PUBLICATIONS */}
 
             <div>
-
               <label style={styles.label}>
                 Intend to Publish New Materials?
               </label>
@@ -1147,10 +1341,11 @@ function ApplyPromotion() {
                 value={
                   form.intends_new_publications
                 }
-                onChange={handleChange}
+                onChange={
+                  handleChange
+                }
                 style={styles.input}
               >
-
                 <option value="">
                   Select
                 </option>
@@ -1162,30 +1357,28 @@ function ApplyPromotion() {
                 <option value="NO">
                   No
                 </option>
-
               </select>
-
             </div>
 
           </div>
-
         </div>
 
         {/* ====================================================
-            SECTION 3 - MATERIALS
+            SECTION 3
         ==================================================== */}
 
         <div style={styles.section}>
 
           <h3 style={styles.sectionTitle}>
-            3. Promotion Materials and Scores
+            3. Promotion Materials
           </h3>
 
           <p style={styles.help}>
-            Enter the score/points for each
-            promotion material and upload the
-            supporting PDF. Materials that do
-            not apply may be left blank.
+            Enter the claimed points and upload
+            supporting evidence for each material.
+            The final score should be verified by
+            the appropriate reviewer according to
+            the promotion guidelines.
           </p>
 
           <div style={styles.tableWrapper}>
@@ -1193,7 +1386,6 @@ function ApplyPromotion() {
             <table style={styles.table}>
 
               <thead>
-
                 <tr>
 
                   <th style={styles.th}>
@@ -1205,7 +1397,7 @@ function ApplyPromotion() {
                   </th>
 
                   <th style={styles.th}>
-                    Score / Points
+                    Claimed Points
                   </th>
 
                   <th style={styles.th}>
@@ -1213,7 +1405,6 @@ function ApplyPromotion() {
                   </th>
 
                 </tr>
-
               </thead>
 
               <tbody>
@@ -1223,7 +1414,6 @@ function ApplyPromotion() {
                     material,
                     index
                   ) => (
-
                     <tr
                       key={
                         material.material_type
@@ -1271,8 +1461,7 @@ function ApplyPromotion() {
                           onChange={(e) =>
                             handleMaterialDocument(
                               index,
-                              e.target
-                                .files?.[0]
+                              e.target.files?.[0]
                             )
                           }
                           style={
@@ -1298,7 +1487,6 @@ function ApplyPromotion() {
                       </td>
 
                     </tr>
-
                   )
                 )}
 
@@ -1314,8 +1502,7 @@ function ApplyPromotion() {
                       styles.totalLabel
                     }
                   >
-                    Total Promotion
-                    Material Points
+                    Total Claimed Points
                   </td>
 
                   <td
@@ -1334,13 +1521,11 @@ function ApplyPromotion() {
               </tfoot>
 
             </table>
-
           </div>
-
         </div>
 
         {/* ====================================================
-            SECTION 4 - SUPPORTING DOCUMENTS
+            SECTION 4
         ==================================================== */}
 
         <div style={styles.section}>
@@ -1350,8 +1535,8 @@ function ApplyPromotion() {
           </h3>
 
           <p style={styles.help}>
-            Upload PDF files only. Maximum
-            size is 10 MB per document.
+            PDF files only. Maximum size:
+            10 MB per document.
           </p>
 
           {/* CV */}
@@ -1368,21 +1553,26 @@ function ApplyPromotion() {
               onChange={handleFileChange(
                 setCv
               )}
-              style={styles.fileInput}
+              style={
+                styles.fileInput
+              }
               required
             />
 
             {cv && (
               <small
-                style={styles.fileName}
+                style={
+                  styles.fileName
+                }
               >
-                ✓ Selected: {cv.name}
+                ✓ Selected:{" "}
+                {cv.name}
               </small>
             )}
 
           </div>
 
-          {/* ADDITIONAL DOCUMENT */}
+          {/* ADDITIONAL */}
 
           <div style={styles.fileGroup}>
 
@@ -1396,12 +1586,16 @@ function ApplyPromotion() {
               onChange={handleFileChange(
                 setAdditionalDocuments
               )}
-              style={styles.fileInput}
+              style={
+                styles.fileInput
+              }
             />
 
             {additionalDocuments && (
               <small
-                style={styles.fileName}
+                style={
+                  styles.fileName
+                }
               >
                 ✓ Selected:{" "}
                 {
@@ -1415,7 +1609,7 @@ function ApplyPromotion() {
         </div>
 
         {/* ====================================================
-            SECTION 5 - DECLARATION
+            SECTION 5
         ==================================================== */}
 
         <div style={styles.section}>
@@ -1436,7 +1630,9 @@ function ApplyPromotion() {
               checked={
                 form.applicant_declaration
               }
-              onChange={handleChange}
+              onChange={
+                handleChange
+              }
             />
 
             <span>
@@ -1453,11 +1649,12 @@ function ApplyPromotion() {
           <div
             style={{
               marginTop: "20px",
+              maxWidth: "400px",
             }}
           >
 
             <label style={styles.label}>
-              Signature Date
+              Signature Date *
             </label>
 
             <input
@@ -1466,8 +1663,11 @@ function ApplyPromotion() {
               value={
                 form.applicant_signature_date
               }
-              onChange={handleChange}
+              onChange={
+                handleChange
+              }
               style={styles.input}
+              required
             />
 
           </div>
@@ -1486,7 +1686,10 @@ function ApplyPromotion() {
               ? 0.7
               : 1,
           }}
-          disabled={loading}
+          disabled={
+            loading ||
+            loadingTitles
+          }
         >
           {loading
             ? "Submitting Promotion..."
@@ -1494,7 +1697,6 @@ function ApplyPromotion() {
         </button>
 
       </form>
-
     </div>
   );
 }
