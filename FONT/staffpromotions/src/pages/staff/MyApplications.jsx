@@ -988,6 +988,7 @@ function MyApplications() {
         "dean_status",
         "dean_review_status",
         "dean_decision",
+        "status",
       ],
       "Waiting"
     );
@@ -1024,6 +1025,10 @@ function MyApplications() {
         "final_status",
         "final_decision",
         "promotion_decision",
+        "status",
+        "application_status",
+        "approval_status",
+        "decision",
       ],
       "Pending"
     );

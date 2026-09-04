@@ -241,6 +241,17 @@ function AppRoutes() {
         }
       />
 
+      <Route
+        path="/staff/appeals"
+        element={
+          <ProtectedRoute allowedRoles={["STAFF"]}>
+            <StaffLayout>
+              <StaffAppeal />
+            </StaffLayout>
+          </ProtectedRoute>
+        }
+      />
+
 
       {/* PEER REVIEWS */}
 

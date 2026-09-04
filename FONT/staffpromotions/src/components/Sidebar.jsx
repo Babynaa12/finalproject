@@ -90,41 +90,46 @@ function Sidebar() {
         icon: <FaFolderOpen />,
       },
 
-      {
-        path: "/staff/history",
-        label: "Promotion History",
-        icon: <FaHistory />,
-      },
+      // {
+      //   path: "/staff/history",
+      //   label: "Promotion History",
+      //   icon: <FaHistory />,
+      // },
 
-      {
-        path: "/staff/appeals",
-        label: "Appeals",
-        icon: <FaFileAlt />,
-      },
 
-      {
-        path: "/staff/peer-reviews",
-        label: "Peer Reviews",
-        icon: <FaClipboardCheck />,
-      },
-
-      {
-        path: "/staff/promotion-material",
-        label: "Promotion Material",
-        icon: <FaFileAlt />,
-      },
-
-      {
+       {
         path: "/staff/student-evaluations",
         label: "Student Evaluations",
         icon: <FaChalkboardTeacher />,
       },
 
+      // {
+      //   path: "/staff/notifications",
+      //   label: "Notifications",
+      //   icon: <FaBell />,
+      // },
+
       {
-        path: "/staff/notifications",
-        label: "Notifications",
-        icon: <FaBell />,
+        path: "/staff/appeal",
+        label: "Appeals",
+        icon: <FaFileAlt />,
       },
+
+      // {
+      //   path: "/staff/peer-reviews",
+      //   label: "Peer Reviews",
+      //   icon: <FaClipboardCheck />,
+      // },
+
+      // {
+      //   path: "/staff/promotion-material",
+      //   label: "Promotion Material",
+      //   icon: <FaFileAlt />,
+      // },
+
+     
+
+      
 
       {
         path: "/staff/profile",
@@ -150,11 +155,11 @@ function Sidebar() {
         icon: <FaChalkboardTeacher />,
       },
 
-      {
-        path: "/student/evaluation-history",
-        label: "Evaluation History",
-        icon: <FaHistory />,
-      },
+      // {
+      //   path: "/student/evaluation-history",
+      //   label: "Evaluation History",
+      //   icon: <FaHistory />,
+      // },
 
       {
         path: "/student/profile",
@@ -258,23 +263,23 @@ function Sidebar() {
         icon: <FaClipboardList />,
       },
 
-      {
-        path: "/reviewer/reviewer-materials",
-        label: "Reviewer Materials",
-        icon: <FaFileAlt />,
-      },
+      // {
+      //   path: "/reviewer/reviewer-materials",
+      //   label: "Reviewer Materials",
+      //   icon: <FaFileAlt />,
+      // },
 
-      {
-        path: "/reviewer/completed-reviews",
-        label: "Completed Reviews",
-        icon: <FaHistory />,
-      },
+      // {
+      //   path: "/reviewer/completed-reviews",
+      //   label: "Completed Reviews",
+      //   icon: <FaHistory />,
+      // },
 
-      {
-        path: "/reviewer/profile",
-        label: "Profile",
-        icon: <FaUser />,
-      },
+      // {
+      //   path: "/reviewer/profile",
+      //   label: "Profile",
+      //   icon: <FaUser />,
+      // },
     ],
   };
 

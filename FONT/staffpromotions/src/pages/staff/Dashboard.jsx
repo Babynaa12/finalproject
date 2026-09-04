@@ -1,10 +1,11 @@
+
 import { useEffect, useState } from "react";
 import api from "../../services/api";
 import "../../styles/Dashboard.css";
 
 function Dashboard() {
   // ============================================================
-  // CURRENT USER
+  // CURRENT LOGGED-IN USER
   // ============================================================
 
   const user = JSON.parse(localStorage.getItem("user"));
@@ -15,11 +16,12 @@ function Dashboard() {
 
   const [applications, setApplications] = useState([]);
   const [notifications, setNotifications] = useState([]);
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   // ============================================================
-  // FETCH DASHBOARD DATA
+  // FETCH DATA FROM BACKEND
   // ============================================================
 
   useEffect(() => {
@@ -33,41 +35,54 @@ function Dashboard() {
 
       const token = localStorage.getItem("token");
 
+      if (!token) {
+        setError("You are not authenticated.");
+        return;
+      }
+
       const config = {
         headers: {
           Authorization: `Bearer ${token}`,
         },
       };
 
-      // --------------------------------------------------------
-      // APPLICATIONS
-      // --------------------------------------------------------
+      // ========================================================
+      // 1. PROMOTION APPLICATIONS
+      // ========================================================
 
       const applicationResponse = await api.get(
         "/api/applications/",
         config
       );
 
-      const allApplications = Array.isArray(
+      console.log(
+        "MY PROMOTION APPLICATIONS:",
+        applicationResponse.data
+      );
+
+      const backendApplications = Array.isArray(
         applicationResponse.data
       )
         ? applicationResponse.data
         : [];
 
-      // --------------------------------------------------------
-      // ONLY CURRENT STAFF APPLICATIONS
-      // --------------------------------------------------------
+      /*
+       * IMPORTANT:
+       *
+       * The backend already filters STAFF applications using:
+       *
+       * PromotionApplication.objects.filter(
+       *     employee=user
+       * )
+       *
+       * Therefore we use the backend response directly.
+       */
 
-      const myApplications = allApplications.filter(
-        (app) =>
-          String(app.employee) === String(user?.id)
-      );
+      setApplications(backendApplications);
 
-      setApplications(myApplications);
-
-      // --------------------------------------------------------
-      // NOTIFICATIONS
-      // --------------------------------------------------------
+      // ========================================================
+      // 2. NOTIFICATIONS
+      // ========================================================
 
       try {
         const notificationResponse = await api.get(
@@ -75,25 +90,39 @@ function Dashboard() {
           config
         );
 
-        const allNotifications = Array.isArray(
+        console.log(
+          "MY NOTIFICATIONS:",
+          notificationResponse.data
+        );
+
+        const backendNotifications = Array.isArray(
           notificationResponse.data
         )
           ? notificationResponse.data
           : [];
 
-        const myNotifications = allNotifications.filter(
-          (notification) =>
-            String(
-              notification.employee ||
-                notification.user
-            ) === String(user?.id)
-        );
+        /*
+         * Backend should ideally already filter notifications
+         * for the logged-in employee.
+         *
+         * We still perform a safety filter here.
+         */
+
+        const myNotifications =
+          backendNotifications.filter(
+            (notification) =>
+              String(
+                notification.employee ??
+                  notification.user ??
+                  ""
+              ) === String(user?.id)
+          );
 
         setNotifications(myNotifications);
 
       } catch (notificationError) {
-        console.log(
-          "Notification endpoint not available:",
+        console.warn(
+          "Notification endpoint error:",
           notificationError
         );
 
@@ -107,6 +136,7 @@ function Dashboard() {
       );
 
       setError(
+        err.response?.data?.error ||
         "Unable to load dashboard information."
       );
 
@@ -116,27 +146,54 @@ function Dashboard() {
   };
 
   // ============================================================
-  // APPLICATION COUNTS
+  // APPLICATION STATUS
   // ============================================================
 
-  const total = applications.length;
+  /*
+   * IMPORTANT:
+   *
+   * Your Django model uses:
+   *
+   * DRAFT
+   * SUBMITTED
+   * HOD_REVIEW
+   * DEAN_REVIEW
+   * UNDER_REVIEW
+   * COMMITTEE_REVIEW
+   * APPROVED
+   * REJECTED
+   * APPEALED
+   *
+   * Therefore we use application.status.
+   */
 
-  const pending = applications.filter(
+  const totalApplications = applications.length;
+
+  const pendingApplications = applications.filter(
     (application) =>
-      String(application.final_status || "")
-        .toLowerCase() === "pending"
+      [
+        "DRAFT",
+        "SUBMITTED",
+        "HOD_REVIEW",
+        "DEAN_REVIEW",
+        "UNDER_REVIEW",
+        "COMMITTEE_REVIEW",
+        "APPEALED",
+      ].includes(
+        String(application.status || "").toUpperCase()
+      )
   ).length;
 
-  const approved = applications.filter(
+  const approvedApplications = applications.filter(
     (application) =>
-      String(application.final_status || "")
-        .toLowerCase() === "approved"
+      String(application.status || "").toUpperCase() ===
+      "APPROVED"
   ).length;
 
-  const rejected = applications.filter(
+  const rejectedApplications = applications.filter(
     (application) =>
-      String(application.final_status || "")
-        .toLowerCase() === "rejected"
+      String(application.status || "").toUpperCase() ===
+      "REJECTED"
   ).length;
 
   // ============================================================
@@ -145,8 +202,7 @@ function Dashboard() {
 
   const unreadNotifications = notifications.filter(
     (notification) =>
-      notification.is_read === false ||
-      notification.is_read === undefined
+      notification.is_read === false
   ).length;
 
   // ============================================================
@@ -157,14 +213,14 @@ function Dashboard() {
     .sort((a, b) => {
       const dateA = new Date(
         a.created_at ||
-          a.submitted_at ||
-          0
+        a.submitted_at ||
+        0
       );
 
       const dateB = new Date(
         b.created_at ||
-          b.submitted_at ||
-          0
+        b.submitted_at ||
+        0
       );
 
       return dateB - dateA;
@@ -172,25 +228,52 @@ function Dashboard() {
     .slice(0, 5);
 
   // ============================================================
+  // STATUS DISPLAY
+  // ============================================================
+
+  const getStatusLabel = (status) => {
+    const value = String(status || "").toUpperCase();
+
+    const labels = {
+      DRAFT: "Draft",
+      SUBMITTED: "Submitted",
+      HOD_REVIEW: "HOD Review",
+      DEAN_REVIEW: "Dean Review",
+      UNDER_REVIEW: "Academic Review",
+      COMMITTEE_REVIEW: "Committee Review",
+      APPROVED: "Approved",
+      REJECTED: "Rejected",
+      APPEALED: "Appealed",
+    };
+
+    return labels[value] || value || "Unknown";
+  };
+
+  // ============================================================
   // STATUS CLASS
   // ============================================================
 
   const getStatusClass = (status) => {
-    const value = String(status || "")
-      .toLowerCase();
+    const value = String(status || "").toUpperCase();
 
-    if (value === "approved") {
+    if (value === "APPROVED") {
       return "status-approved";
     }
 
-    if (value === "rejected") {
+    if (value === "REJECTED") {
       return "status-rejected";
     }
 
     if (
-      value === "pending" ||
-      value === "under review" ||
-      value === "submitted"
+      [
+        "DRAFT",
+        "SUBMITTED",
+        "HOD_REVIEW",
+        "DEAN_REVIEW",
+        "UNDER_REVIEW",
+        "COMMITTEE_REVIEW",
+        "APPEALED",
+      ].includes(value)
     ) {
       return "status-pending";
     }
@@ -250,18 +333,22 @@ function Dashboard() {
       ====================================================== */}
 
       {loading ? (
+
         <div className="dashboard-loading">
           Loading dashboard...
         </div>
+
       ) : (
+
         <>
+
           {/* ==================================================
-              STATISTICS
+              DASHBOARD CARDS
           ================================================== */}
 
           <div className="cards">
 
-            {/* TOTAL */}
+            {/* TOTAL APPLICATIONS */}
 
             <div className="card">
 
@@ -270,11 +357,11 @@ function Dashboard() {
               </h5>
 
               <h2>
-                {total}
+                {totalApplications}
               </h2>
 
               <p>
-                Applications submitted
+                Your promotion applications
               </p>
 
             </div>
@@ -288,11 +375,11 @@ function Dashboard() {
               </h5>
 
               <h2>
-                {pending}
+                {pendingApplications}
               </h2>
 
               <p>
-                Waiting for approval
+                Applications in progress
               </p>
 
             </div>
@@ -306,7 +393,7 @@ function Dashboard() {
               </h5>
 
               <h2>
-                {approved}
+                {approvedApplications}
               </h2>
 
               <p>
@@ -324,7 +411,7 @@ function Dashboard() {
               </h5>
 
               <h2>
-                {rejected}
+                {rejectedApplications}
               </h2>
 
               <p>
@@ -335,7 +422,7 @@ function Dashboard() {
 
             {/* NOTIFICATIONS */}
 
-            <div className="card">
+            {/* <div className="card">
 
               <h5>
                 Notifications
@@ -349,7 +436,7 @@ function Dashboard() {
                 Unread notifications
               </p>
 
-            </div>
+            </div> */}
 
           </div>
 
@@ -373,6 +460,10 @@ function Dashboard() {
               <thead>
 
                 <tr>
+
+                  <th>
+                    Application ID
+                  </th>
 
                   <th>
                     Date
@@ -406,11 +497,15 @@ function Dashboard() {
                       >
 
                         <td>
+                          #{application.id}
+                        </td>
+
+                        <td>
                           {application.created_at ||
                           application.submitted_at
                             ? new Date(
                                 application.created_at ||
-                                  application.submitted_at
+                                application.submitted_at
                               ).toLocaleDateString()
                             : "-"}
                         </td>
@@ -435,13 +530,12 @@ function Dashboard() {
 
                           <span
                             className={`status-badge ${getStatusClass(
-                              application.final_status
+                              application.status
                             )}`}
                           >
-                            {
-                              application.final_status ||
-                              "Pending"
-                            }
+                            {getStatusLabel(
+                              application.status
+                            )}
                           </span>
 
                         </td>
@@ -456,7 +550,7 @@ function Dashboard() {
                   <tr>
 
                     <td
-                      colSpan="4"
+                      colSpan="5"
                       style={{
                         textAlign: "center",
                         padding: "25px",
@@ -517,13 +611,12 @@ function Dashboard() {
 
                       <span
                         className={`status-badge ${getStatusClass(
-                          application.final_status
+                          application.status
                         )}`}
                       >
-                        {
-                          application.final_status ||
-                          "Pending"
-                        }
+                        {getStatusLabel(
+                          application.status
+                        )}
                       </span>
 
                     </div>
@@ -605,7 +698,6 @@ function Dashboard() {
                       }}
                     >
                       {notification.message ||
-                        notification.description ||
                         "You have a promotion status update."}
                     </p>
 
@@ -632,6 +724,7 @@ function Dashboard() {
           )}
 
         </>
+
       )}
 
     </div>
@@ -639,3 +732,4 @@ function Dashboard() {
 }
 
 export default Dashboard;
+

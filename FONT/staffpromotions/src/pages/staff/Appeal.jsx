@@ -3,6 +3,25 @@ import api from "../../services/api";
 
 function Appeal() {
   // ========================================================
+  // LOGGED-IN USER
+  // ========================================================
+
+  const getLoggedInUser = () => {
+    try {
+      return JSON.parse(localStorage.getItem("user") || "{}");
+    } catch {
+      return {};
+    }
+  };
+
+  const loggedInUser = getLoggedInUser();
+  const applicantId =
+    loggedInUser?.id ||
+    loggedInUser?.employee_id ||
+    loggedInUser?.employee?.id ||
+    "";
+
+  // ========================================================
   // STATE
   // ========================================================
 
@@ -26,6 +45,22 @@ function Appeal() {
 
   const [success, setSuccess] = useState("");
   const [error, setError] = useState("");
+
+  // ========================================================
+  // HELPERS
+  // ========================================================
+
+  const extractListData = (payload) => {
+    if (Array.isArray(payload)) {
+      return payload;
+    }
+
+    if (Array.isArray(payload?.results)) {
+      return payload.results;
+    }
+
+    return [];
+  };
 
   // ========================================================
   // LOAD DATA
@@ -59,23 +94,27 @@ function Appeal() {
       // ====================================================
 
       const allApplications =
-        applicationsResponse.data || [];
+        extractListData(applicationsResponse.data);
 
       const rejectedApplications =
         allApplications.filter((app) => {
           const finalStatus = String(
-            app.final_status || app.status || ""
-          ).toUpperCase();
+            app.final_status ||
+              app.dean_status ||
+              app.status ||
+              ""
+          ).trim().toUpperCase();
 
           return (
-            finalStatus === "REJECTED" ||
-            finalStatus === "DECLINED"
+            finalStatus.includes("REJECTED") ||
+            finalStatus.includes("DECLINED") ||
+            finalStatus.includes("NOT RECOMMENDED") ||
+            finalStatus.includes("NOT_APPROVED")
           );
         });
 
       setApplications(rejectedApplications);
-
-      setAppeals(appealsResponse.data || []);
+      setAppeals(extractListData(appealsResponse.data));
 
     } catch (err) {
       console.error(
@@ -167,6 +206,14 @@ function Appeal() {
   // ========================================================
 
   const validateForm = () => {
+    if (!applicantId) {
+      setError(
+        "Your user information could not be found. Please log in again."
+      );
+
+      return false;
+    }
+
     if (!selectedApplication) {
       setError(
         "Please select the rejected promotion application."
@@ -240,13 +287,18 @@ function Appeal() {
       const data = new FormData();
 
       // ====================================================
-      // APPLICATION
+      // APPLICATION + APPLICANT
       // ====================================================
 
-      data.append(
-        "application",
-        selectedApplication
-      );
+      if (applicantId) {
+        data.append("applicant", String(applicantId));
+        data.append("employee", String(applicantId));
+        data.append("applicant_id", String(applicantId));
+      }
+
+      data.append("application", selectedApplication);
+      data.append("application_id", selectedApplication);
+      data.append("promotion_application", selectedApplication);
 
       // ====================================================
       // APPEAL DETAILS
@@ -256,16 +308,19 @@ function Appeal() {
         "decisions_disagreed_with",
         decisionsDisagreedWith
       );
+      data.append(
+        "decision_disagreed_with",
+        decisionsDisagreedWith
+      );
 
       data.append(
         "reasons_for_disagreement",
         reason
       );
+      data.append("reason", reason);
 
-      data.append(
-        "self_rating",
-        selfRating
-      );
+      data.append("self_rating", selfRating);
+      data.append("rating", selfRating);
 
       // ====================================================
       // SUPPORTING DOCUMENT
@@ -274,6 +329,10 @@ function Appeal() {
       if (supportingDocument) {
         data.append(
           "supporting_document",
+          supportingDocument
+        );
+        data.append(
+          "supporting_doc",
           supportingDocument
         );
       }

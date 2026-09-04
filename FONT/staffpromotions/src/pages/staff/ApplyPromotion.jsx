@@ -733,9 +733,33 @@ function ApplyPromotion() {
           })
         );
 
+      // ----------------------------------------------------------------
+      // Send material payload in both compatible formats:
+      // 1) JSON string: backend may parse as a list of materials
+      // 2) indexed field names: easier for DRF serializers / reviewers
+      // ----------------------------------------------------------------
       data.append(
         "promotion_materials",
         JSON.stringify(materialData)
+      );
+
+      materialData.forEach(
+        (item, index) => {
+          data.append(
+            `promotion_materials[${index}][material_type]`,
+            item.material_type
+          );
+          data.append(
+            `promotion_materials[${index}][points]`,
+            String(item.points)
+          );
+          if (item.file_index !== null) {
+            data.append(
+              `promotion_materials[${index}][file_index]`,
+              String(item.file_index)
+            );
+          }
+        }
       );
 
       // ========================================================
