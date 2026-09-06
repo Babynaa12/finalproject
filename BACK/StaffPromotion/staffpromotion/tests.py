@@ -1,7 +1,7 @@
 from django.test import RequestFactory, TestCase, override_settings
 
-from .models import Department, Employee, JobTitle, PromotionApplication
-from .views import _filter_queryset_for_user
+from .models import Department, Employee, JobTitle, PromotionApplication, PromotionNotification
+from .views import _filter_queryset_for_user, create_application_notification
 
 
 @override_settings(
@@ -146,3 +146,39 @@ class PromotionApplicationWorkflowCompletionTests(TestCase):
         )
         self.assertIn(student_application, visible)
         self.assertNotIn(application, visible)
+
+    def test_stage_updates_create_notification_for_staff(self):
+        department = Department.objects.create(department_name="Health Sciences")
+        title = JobTitle.objects.create(title_name="Professor")
+        staff = Employee.objects.create_user(
+            username="staff_notify",
+            email="notify.staff@example.com",
+            first_name="Staff",
+            last_name="User",
+            password="Passw0rd!",
+            role="STAFF",
+            department=department,
+        )
+        application = PromotionApplication.objects.create(
+            employee=staff,
+            full_name="Staff User",
+            current_title=title,
+            targeted_title=title,
+            status="SUBMITTED",
+        )
+
+        create_application_notification(
+            application,
+            notification_type="HOD_REVIEW",
+            title="HOD review started",
+            message="Your promotion application is now under HOD review.",
+            status="HOD_REVIEW",
+        )
+
+        self.assertTrue(
+            PromotionNotification.objects.filter(
+                employee=staff,
+                application=application,
+                notification_type="HOD_REVIEW",
+            ).exists()
+        )

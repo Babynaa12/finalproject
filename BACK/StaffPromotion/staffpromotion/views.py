@@ -6441,6 +6441,100 @@ def appeal_decision(request, pk):
     )
 
 
+from .models import PromotionNotification
+
+
+def create_application_notification(
+    application,
+    *,
+    employee=None,
+    notification_type="GENERAL",
+    title=None,
+    message=None,
+    status=None,
+):
+    """
+    Create a notification for the staff applicant.
+    """
+    if not application:
+        return None
+
+    recipient = employee or getattr(application, "employee", None)
+    if not recipient:
+        return None
+
+    final_title = title or f"Promotion update: {getattr(application, 'status', 'ACTIVE')}"
+    final_message = message or final_title
+    final_status = status or getattr(application, "status", None)
+
+    return PromotionNotification.objects.create(
+        employee=recipient,
+        application=application,
+        notification_type=notification_type,
+        title=final_title,
+        message=final_message,
+        status=final_status,
+    )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def list_notifications(request):
+    notifications = PromotionNotification.objects.filter(
+        employee=request.user
+    ).order_by("-created_at")
+
+    return Response(
+        PromotionNotificationSerializer(
+            notifications,
+            many=True,
+        ).data
+    )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def notify_application_staff(request, pk):
+    try:
+        application = PromotionApplication.objects.get(id=pk)
+    except PromotionApplication.DoesNotExist:
+        return Response(
+            {"error": "Application not found."},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    if request.user.role not in ["HOD", "DEAN", "REVIEWER", "COMMITTEE", "ADMIN", "STAFF"]:
+        return Response(
+            {"error": "You are not allowed to post a notification for this application."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    title = request.data.get("title") or "Promotion status update"
+    message = request.data.get("message")
+    notification_type = request.data.get("notification_type", "GENERAL")
+    status_value = request.data.get("status") or application.status
+
+    if not message:
+        return Response(
+            {"error": "Notification message is required."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    notification = create_application_notification(
+        application,
+        employee=application.employee,
+        notification_type=notification_type,
+        title=title,
+        message=message,
+        status=status_value,
+    )
+
+    return Response(
+        PromotionNotificationSerializer(notification).data,
+        status=status.HTTP_201_CREATED,
+    )
+
+
 # ============================================================
 # GENERIC CRUD
 # ============================================================

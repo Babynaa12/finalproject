@@ -39,6 +39,11 @@ urlpatterns = [
         name="dashboard_stats"
     ),
 
+    path(
+        "notifications/",
+        views.list_notifications,
+        name="notifications_list"
+    ),
 
     # ========================================================
     # PROMOTION ELIGIBILITY
@@ -170,6 +175,12 @@ urlpatterns = [
         "applications/<int:pk>/hod-review/",
         views.hod_review_application,
         name="hod_review_application"
+    ),
+
+    path(
+        "applications/<int:pk>/notify/",
+        views.notify_application_staff,
+        name="notify_application_staff"
     ),
 
     # ========================================================

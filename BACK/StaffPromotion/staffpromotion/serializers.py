@@ -15,6 +15,7 @@ from .models import (
     PromotionHistory,
     SystemLog,
     ReviewerAssignment,
+    PromotionNotification,
 )
 
 User = get_user_model()
@@ -77,6 +78,44 @@ class JobTitleSerializer(serializers.ModelSerializer):
 # ============================================================
 # 3. EMPLOYEE SERIALIZER
 # ============================================================
+
+class PromotionNotificationSerializer(serializers.ModelSerializer):
+
+    employee_name = serializers.SerializerMethodField()
+    application_id = serializers.SerializerMethodField()
+
+    class Meta:
+        model = PromotionNotification
+        fields = [
+            "id",
+            "employee",
+            "employee_name",
+            "application",
+            "application_id",
+            "notification_type",
+            "title",
+            "message",
+            "status",
+            "is_read",
+            "created_at",
+            "read_at",
+        ]
+        read_only_fields = [
+            "id",
+            "employee",
+            "application",
+            "employee_name",
+            "application_id",
+            "created_at",
+            "read_at",
+        ]
+
+    def get_employee_name(self, obj):
+        return employee_full_name(getattr(obj, "employee", None))
+
+    def get_application_id(self, obj):
+        return getattr(obj.application, "id", None)
+
 
 class EmployeeSerializer(serializers.ModelSerializer):
 
