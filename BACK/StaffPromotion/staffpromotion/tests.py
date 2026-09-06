@@ -8,7 +8,9 @@ from .models import (
     PromotionApplication,
     PromotionMaterial,
     PromotionNotification,
+    ReviewerAssignment,
 )
+from .serializers import ReviewerAssignmentSerializer
 from .views import _filter_queryset_for_user, create_application_notification
 
 
@@ -190,6 +192,142 @@ class PromotionApplicationWorkflowCompletionTests(TestCase):
                 notification_type="HOD_REVIEW",
             ).exists()
         )
+
+    def test_hod_review_accepts_frontend_legacy_decision_values(self):
+        department = Department.objects.create(department_name="Engineering")
+        title = JobTitle.objects.create(title_name="Senior Lecturer")
+
+        staff = Employee.objects.create_user(
+            username="hod_legacy_staff",
+            email="hod.legacy.staff@example.com",
+            first_name="Legacy",
+            last_name="Staff",
+            password="Passw0rd!",
+            role="STAFF",
+            department=department,
+        )
+        hod = Employee.objects.create_user(
+            username="hod_legacy_user",
+            email="hod.legacy@example.com",
+            first_name="Head",
+            last_name="OfDepartment",
+            password="Passw0rd!",
+            role="HOD",
+            department=department,
+        )
+
+        application = PromotionApplication.objects.create(
+            employee=staff,
+            full_name="Legacy Staff",
+            current_title=title,
+            targeted_title=title,
+            status="SUBMITTED",
+        )
+
+        client = APIClient()
+        client.force_authenticate(user=hod)
+        response = client.patch(
+            f"/api/applications/{application.id}/hod-review/",
+            {"recommendation": "recommended", "comments": "Looks good"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        application.refresh_from_db()
+        self.assertEqual(application.status, "DEAN_REVIEW")
+        self.assertEqual(application.hod_comments, "Looks good")
+
+    def test_reviewer_assignment_completion_patch_updates_completion_state(self):
+        department = Department.objects.create(department_name="Engineering")
+        title = JobTitle.objects.create(title_name="Senior Lecturer")
+
+        staff = Employee.objects.create_user(
+            username="reviewer_completion_staff",
+            email="reviewer.completion.staff@example.com",
+            first_name="Completion",
+            last_name="Staff",
+            password="Passw0rd!",
+            role="STAFF",
+            department=department,
+        )
+        reviewer = Employee.objects.create_user(
+            username="reviewer_completion_user",
+            email="reviewer.completion@example.com",
+            first_name="Reviewer",
+            last_name="User",
+            password="Passw0rd!",
+            role="REVIEWER",
+            department=department,
+        )
+
+        application = PromotionApplication.objects.create(
+            employee=staff,
+            full_name="Completion Staff",
+            current_title=title,
+            targeted_title=title,
+            status="UNDER_REVIEW",
+            assigned_reviewer=reviewer,
+        )
+        assignment = ReviewerAssignment.objects.create(
+            application=application,
+            reviewer=reviewer,
+        )
+
+        client = APIClient()
+        client.force_authenticate(user=reviewer)
+        response = client.patch(
+            f"/api/reviewer-assignments/{assignment.id}/",
+            {"completed": True},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        assignment.refresh_from_db()
+        self.assertTrue(assignment.completed)
+        self.assertEqual(response.data["review_status"], "COMPLETED")
+
+    def test_reviewer_assignment_serializer_exposes_application_label_data(self):
+        department = Department.objects.create(department_name="Engineering")
+        current_title = JobTitle.objects.create(title_name="Lecturer")
+        target_title = JobTitle.objects.create(title_name="Senior Lecturer")
+
+        staff = Employee.objects.create_user(
+            username="review_assignment_staff",
+            email="assignment.staff@example.com",
+            first_name="Assignment",
+            last_name="Staff",
+            password="Passw0rd!",
+            role="STAFF",
+            department=department,
+        )
+        reviewer = Employee.objects.create_user(
+            username="review_assignment_reviewer",
+            email="assignment.reviewer@example.com",
+            first_name="Reviewer",
+            last_name="User",
+            password="Passw0rd!",
+            role="REVIEWER",
+            department=department,
+        )
+
+        application = PromotionApplication.objects.create(
+            employee=staff,
+            full_name="Assignment Staff",
+            current_title=current_title,
+            targeted_title=target_title,
+            status="SUBMITTED",
+        )
+        assignment = ReviewerAssignment.objects.create(
+            application=application,
+            reviewer=reviewer,
+            completed=False,
+        )
+
+        payload = ReviewerAssignmentSerializer(assignment).data
+
+        self.assertEqual(payload["department_name"], "Engineering")
+        self.assertEqual(payload["current_title_name"], "Lecturer")
+        self.assertEqual(payload["targeted_title_name"], "Senior Lecturer")
 
     def test_application_total_points_are_recalculated_from_materials(self):
         department = Department.objects.create(department_name="Humanities")

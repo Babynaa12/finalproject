@@ -66,10 +66,17 @@ function ReviewApplication() {
 
       console.log("Sending recommendation:", recommendation);
 
-      const response = await api.post(
+      const normalizedRecommendation =
+        recommendation === "recommended"
+          ? "RECOMMEND"
+          : recommendation === "not_recommended"
+          ? "REJECT"
+          : recommendation;
+
+      const response = await api.patch(
         `/api/applications/${id}/hod-review/`,
         {
-          recommendation: recommendation,
+          decision: normalizedRecommendation,
           comments: comments,
         },
         {
@@ -152,7 +159,7 @@ function ReviewApplication() {
 
       <div style={styles.infoCard}>
 
-        <div>
+        {/* <div>
           <span style={styles.label}>
             Application ID
           </span>
@@ -160,7 +167,7 @@ function ReviewApplication() {
           <strong style={styles.value}>
             {id}
           </strong>
-        </div>
+        </div> */}
 
         <div>
           <span style={styles.label}>

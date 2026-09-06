@@ -129,9 +129,9 @@ function ApplicationDetail() {
             Promotion Application
           </h1>
 
-          <p style={styles.subtitle}>
+          {/* <p style={styles.subtitle}>
             Application ID: #{application.id}
-          </p>
+          </p> */}
         </div>
 
         <button
@@ -380,11 +380,11 @@ function ApplicationDetail() {
                       material.file ? (
 
                         <a
-                          href={
+                          href={toMediaUrl(
                             material.document_url ||
                             material.document ||
                             material.file
-                          }
+                          )}
                           target="_blank"
                           rel="noreferrer"
                           style={styles.documentButton}
@@ -425,9 +425,12 @@ function ApplicationDetail() {
           </span>
 
           <strong>
-            {application.other_publication_points ||
-              application.total_material_points ||
-              "0.00"}
+            {Number(
+              application.total_points ??
+              application.other_publication_points ??
+              application.total_material_points ??
+              0
+            ).toFixed(2)}
           </strong>
 
         </div>
@@ -610,6 +613,31 @@ function ApplicationDetail() {
   );
 }
 
+const toMediaUrl = (value) => {
+  if (!value || typeof value !== "string") {
+    return "";
+  }
+
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return "";
+  }
+
+  if (
+    /^https?:\/\//i.test(trimmed) ||
+    trimmed.startsWith("data:")
+  ) {
+    return trimmed;
+  }
+
+  if (trimmed.startsWith("/")) {
+    return `http://127.0.0.1:8000${trimmed}`;
+  }
+
+  return `http://127.0.0.1:8000/media/${trimmed.replace(/^media\//, "")}`;
+};
+
 
 /* ============================================================
    INFORMATION COMPONENT
@@ -656,7 +684,7 @@ function Document({ title, url }) {
       </div>
 
       <a
-        href={url}
+        href={toMediaUrl(url)}
         target="_blank"
         rel="noreferrer"
         style={styles.documentButton}

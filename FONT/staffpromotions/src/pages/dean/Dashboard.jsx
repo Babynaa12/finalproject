@@ -40,11 +40,16 @@ function Dashboard() {
   // ============================================================
 
   const normalize = (value) => {
-    return String(value || "")
+    if (value === null || value === undefined || value === "") {
+      return "";
+    }
+
+    return String(value)
       .trim()
       .toLowerCase()
-      .replace(/_/g, " ")
-      .replace(/-/g, " ");
+      .replace(/[_-]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
   };
 
   // ============================================================
@@ -171,6 +176,7 @@ function Dashboard() {
       "accepted",
       "not recommended",
       "not recommend",
+      "not recommended",
       "rejected",
       "declined",
     ].includes(recommendation);
@@ -189,12 +195,14 @@ function Dashboard() {
     return (
       status === "rejected" ||
       status === "not recommended" ||
+      status === "not recommend" ||
       status === "declined" ||
       hodRecommendation === "rejected" ||
       hodRecommendation === "not recommended" ||
       hodRecommendation === "not recommend" ||
       deanRecommendation === "rejected" ||
-      deanRecommendation === "not recommended"
+      deanRecommendation === "not recommended" ||
+      deanRecommendation === "not recommend"
     );
   };
 
@@ -1037,9 +1045,9 @@ function Dashboard() {
                   Status
                 </th>
 
-                <th style={styles.th}>
+                {/* <th style={styles.th}>
                   Action
-                </th>
+                </th> */}
 
               </tr>
 
@@ -1141,7 +1149,7 @@ function Dashboard() {
 
                       {/* ACTION */}
 
-                      <td style={styles.td}>
+                      {/* <td style={styles.td}>
 
                         <button
                           style={styles.viewButton}
@@ -1153,7 +1161,7 @@ function Dashboard() {
                           Review
                         </button>
 
-                      </td>
+                      </td> */}
 
                     </tr>
 

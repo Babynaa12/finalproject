@@ -1424,9 +1424,9 @@ function Dashboard() {
                       Due Date
                     </th>
 
-                    <th style={styles.th}>
+                    {/* <th style={styles.th}>
                       Action
-                    </th>
+                    </th> */}
 
                   </tr>
                 </thead>
@@ -1571,7 +1571,7 @@ function Dashboard() {
 
                           {/* ACTION */}
 
-                          <td style={styles.td}>
+                          {/* <td style={styles.td}>
 
                             <button
                               onClick={() =>
@@ -1596,7 +1596,7 @@ function Dashboard() {
 
                             </button>
 
-                          </td>
+                          </td> */}
 
                         </tr>
                       );

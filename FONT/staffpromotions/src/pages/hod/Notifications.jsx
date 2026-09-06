@@ -247,31 +247,6 @@ function Notifications() {
     <div style={styles.container}>
 
       {/* ======================================================
-          HEADER
-      ====================================================== */}
-
-      <div style={styles.header}>
-
-        <div>
-          <h2 style={styles.title}>
-            Notifications
-          </h2>
-
-          <p style={styles.subtitle}>
-            Check updates about your promotion application,
-            reviews and approval status.
-          </p>
-        </div>
-
-        {unreadCount > 0 && (
-          <div style={styles.unreadBadge}>
-            {unreadCount} Unread
-          </div>
-        )}
-
-      </div>
-
-      {/* ======================================================
           ACTIONS
       ====================================================== */}
 

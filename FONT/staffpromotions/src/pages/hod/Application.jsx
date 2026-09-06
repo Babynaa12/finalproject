@@ -33,9 +33,19 @@ function Application() {
         },
       });
 
-      const data = Array.isArray(response.data)
-        ? response.data
-        : [];
+      let data = response.data;
+
+      if (Array.isArray(data)) {
+        data = data;
+      } else if (Array.isArray(data?.results)) {
+        data = data.results;
+      } else if (data && typeof data === "object") {
+        data = Object.values(data).filter(
+          (item) => item && typeof item === "object"
+        );
+      } else {
+        data = [];
+      }
 
       setApplications(data);
 
@@ -102,14 +112,26 @@ function Application() {
         application.employee?.name ||
         "";
 
+      const departmentName =
+        application.department_name ||
+        application.employee?.department_name ||
+        application.employee?.department?.department_name ||
+        application.employee?.department?.name ||
+        "-";
+
       const currentPosition =
         application.current_title_name ||
         application.current_title?.title_name ||
+        application.current_title?.name ||
+        application.current_position_name ||
         "";
 
       const targetPosition =
         application.targeted_title_name ||
         application.targeted_title?.title_name ||
+        application.targeted_title?.name ||
+        application.position_applied_for_name ||
+        application.position_applied_for?.title_name ||
         "";
 
       const matchesSearch =
@@ -369,11 +391,11 @@ function Application() {
                 <tr>
 
                   <th style={styles.th}>
-                    ID
+                    Staff Name
                   </th>
 
                   <th style={styles.th}>
-                    Staff Name
+                    Department
                   </th>
 
                   <th style={styles.th}>
@@ -418,21 +440,44 @@ function Application() {
                         application.employee?.name ||
                         "Unknown";
 
+                      const departmentName =
+                        application.department_name ||
+                        application.employee?.department_name ||
+                        application.employee?.department?.department_name ||
+                        application.employee?.department?.name ||
+                        "-";
+
                       const currentPosition =
                         application.current_title_name ||
                         application.current_title?.title_name ||
+                        application.current_title?.name ||
                         "-";
 
                       const targetPosition =
                         application.targeted_title_name ||
                         application.targeted_title?.title_name ||
+                        application.targeted_title?.name ||
                         "-";
 
-                      const points =
-                        application.other_publication_points ??
-                        application.total_material_points ??
-                        application.total_points ??
-                        "0.00";
+                      const materialEntries = Array.isArray(application.materials)
+                        ? application.materials
+                        : Array.isArray(application.promotion_materials)
+                        ? application.promotion_materials
+                        : [];
+
+                      const materialTotal = materialEntries.length > 0
+                        ? materialEntries.reduce(
+                            (sum, item) => sum + Number(item?.points || 0),
+                            0
+                          )
+                        : Number(
+                            application.total_points ??
+                            application.other_publication_points ??
+                            application.total_material_points ??
+                            0
+                          );
+
+                      const points = Number(materialTotal || 0).toFixed(2);
 
                       const status =
                         application.manager_status ||
@@ -447,10 +492,6 @@ function Application() {
                           style={styles.tr}
                         >
 
-                          <td style={styles.td}>
-                            #{application.id}
-                          </td>
-
                           <td
                             style={{
                               ...styles.td,
@@ -461,11 +502,15 @@ function Application() {
                           </td>
 
                           <td style={styles.td}>
-                            {currentPosition}
+                            {departmentName}
                           </td>
 
                           <td style={styles.td}>
-                            {targetPosition}
+                            {currentPosition || "-"}
+                          </td>
+
+                          <td style={styles.td}>
+                            {targetPosition || "-"}
                           </td>
 
                           <td
@@ -532,7 +577,7 @@ function Application() {
                   <tr>
 
                     <td
-                      colSpan="8"
+                      colSpan="9"
                       style={styles.empty}
                     >
                       No promotion applications found.

@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from django.contrib.auth import get_user_model
+from django.utils import timezone
 
 from .models import (
     Department,
@@ -1303,7 +1304,12 @@ class ReviewerAssignmentSerializer(
     serializers.ModelSerializer
 ):
 
-    completed = serializers.SerializerMethodField()
+    completed = serializers.BooleanField(
+        required=False,
+        default=False
+    )
+
+    review_status = serializers.SerializerMethodField()
 
     # ========================================================
     # APPLICATION ID
@@ -1360,6 +1366,7 @@ class ReviewerAssignmentSerializer(
 
             # Completion
             "completed",
+            "review_status",
             "completed_at",
 
             # Comments
@@ -1374,16 +1381,30 @@ class ReviewerAssignmentSerializer(
             "assigned_by_name",
             "employee_name",
             "assigned_at",
+            "review_status",
             "completed_at",
         ]
 
-    def get_completed(self, obj):
+    def get_review_status(self, obj):
+        if obj.completed:
+            return "COMPLETED"
+
         application = getattr(obj, "application", None)
 
-        if not application:
-            return False
+        if application and getattr(application, "reviewer_stage_completed", False):
+            return "COMPLETED"
 
-        return bool(application.reviewer_stage_completed)
+        return "PENDING"
+
+    def update(self, instance, validated_data):
+        completed = validated_data.get("completed", instance.completed)
+
+        if completed and not instance.completed:
+            validated_data["completed_at"] = timezone.now()
+        elif not completed and instance.completed:
+            validated_data["completed_at"] = None
+
+        return super().update(instance, validated_data)
 
     # ========================================================
     # APPLICATION ID

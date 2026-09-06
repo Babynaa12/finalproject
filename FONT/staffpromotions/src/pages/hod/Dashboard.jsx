@@ -397,7 +397,7 @@ function Dashboard() {
           </p>
         </div>
 
-        <button
+        {/* <button
           style={styles.applicationButton}
           onClick={() =>
             navigate("/hod/applications")
@@ -405,7 +405,7 @@ function Dashboard() {
         >
           <FaClipboardList />
           View Applications
-        </button>
+        </button> */}
 
       </div>
 

@@ -179,11 +179,11 @@ function Sidebar() {
         icon: <FaHome />,
       },
 
-      {
-        path: "/hod/applications",
-        label: "Applications",
-        icon: <FaFolderOpen />,
-      },
+      // {
+      //   path: "/hod/applications",
+      //   label: "Applications",
+      //   icon: <FaFolderOpen />,
+      // },
 
       // {
       //   path: "/hod/reviews",
@@ -203,11 +203,11 @@ function Sidebar() {
       //   icon: <FaChartBar />,
       // },
 
-      {
-        path: "/hod/history",
-        label: "History",
-        icon: <FaHistory />,
-      },
+      // {
+      //   path: "/hod/history",
+      //   label: "History",
+      //   icon: <FaHistory />,
+      // },
 
       {
         path: "/hod/notifications",
@@ -227,11 +227,11 @@ function Sidebar() {
         icon: <FaHome />,
       },
 
-      {
-        path: "/dean/applications",
-        label: "Applications",
-        icon: <FaFolderOpen />,
-      },
+      // {
+      //   path: "/dean/applications",
+      //   label: "Applications",
+      //   icon: <FaFolderOpen />,
+      // },
 
       // {
       //   path: "/dean/reviews",
@@ -245,11 +245,11 @@ function Sidebar() {
       //   icon: <FaChartBar />,
       // },
 
-      {
-        path: "/dean/history",
-        label: "History",
-        icon: <FaHistory />,
-      },
+      // {
+      //   path: "/dean/history",
+      //   label: "History",
+      //   icon: <FaHistory />,
+      // },
 
       {
         path: "/dean/notifications",

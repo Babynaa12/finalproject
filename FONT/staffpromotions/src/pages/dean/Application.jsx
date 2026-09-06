@@ -845,7 +845,7 @@ function Application() {
 
                       {/* APPLICANT */}
 
-                      <td style={styles.td}>
+                      {/* <td style={styles.td}>
 
                         <div style={styles.applicant}>
 
@@ -869,7 +869,7 @@ function Application() {
 
                         </div>
 
-                      </td>
+                      </td> */}
 
                       {/* CURRENT POSITION */}
 

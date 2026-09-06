@@ -974,7 +974,7 @@ function TeachingEvaluations() {
               </strong>
             </div>
 
-            <div>
+            {/* <div>
               <span style={styles.smallLabel}>
                 STUDENT ID
               </span>
@@ -982,7 +982,7 @@ function TeachingEvaluations() {
               <strong>
                 {getStudentId()}
               </strong>
-            </div>
+            </div> */}
 
           </div>
         )}
@@ -1046,7 +1046,7 @@ function TeachingEvaluations() {
                   </strong>
                 </div>
 
-                <div style={styles.infoField}>
+                {/* <div style={styles.infoField}>
                   <label>
                     Student ID
                   </label>
@@ -1054,7 +1054,7 @@ function TeachingEvaluations() {
                   <strong>
                     {getStudentId()}
                   </strong>
-                </div>
+                </div> */}
 
               </div>
             </div>

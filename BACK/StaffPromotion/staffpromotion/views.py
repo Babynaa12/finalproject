@@ -3977,8 +3977,24 @@ def hod_review_application(request, pk):
             status=status.HTTP_404_NOT_FOUND
         )
 
-    decision = request.data.get(
-        "decision"
+    raw_decision = request.data.get(
+        "decision",
+        request.data.get("recommendation")
+    )
+
+    decision = str(raw_decision or "").strip().upper()
+
+    normalized_decision = {
+        "RECOMMEND": "RECOMMEND",
+        "RECOMMENDED": "RECOMMEND",
+        "REJECT": "REJECT",
+        "REJECTED": "REJECT",
+        "NOT_RECOMMENDED": "REJECT",
+    }
+
+    decision = normalized_decision.get(
+        decision,
+        decision
     )
 
     comments = request.data.get(
@@ -5736,8 +5752,24 @@ def hod_review_application(request, pk):
             status=status.HTTP_404_NOT_FOUND
         )
 
-    decision = request.data.get(
-        "decision"
+    raw_decision = request.data.get(
+        "decision",
+        request.data.get("recommendation")
+    )
+
+    decision = str(raw_decision or "").strip().upper()
+
+    normalized_decision = {
+        "RECOMMEND": "RECOMMEND",
+        "RECOMMENDED": "RECOMMEND",
+        "REJECT": "REJECT",
+        "REJECTED": "REJECT",
+        "NOT_RECOMMENDED": "REJECT",
+    }
+
+    decision = normalized_decision.get(
+        decision,
+        decision
     )
 
     comments = request.data.get(

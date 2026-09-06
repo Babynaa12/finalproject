@@ -294,6 +294,25 @@ function Dashboard() {
     user?.username ||
     "Staff";
 
+  const getApplicationIdLabel = (application) => {
+    const id = application?.id ?? "";
+    return id ? `APP-${String(id).padStart(3, "0")}` : "-";
+  };
+
+  const getApplicantName = (application) => {
+    return (
+      application?.employee_name ||
+      application?.applicant_name ||
+      application?.employee?.full_name ||
+      application?.employee?.name ||
+      application?.employee?.username ||
+      `${application?.employee?.first_name || ""} ${
+        application?.employee?.last_name || ""
+      }`.trim() ||
+      "Unknown Applicant"
+    );
+  };
+
   // ============================================================
   // RENDER
   // ============================================================
@@ -466,6 +485,10 @@ function Dashboard() {
                   </th>
 
                   <th>
+                    Applicant
+                  </th>
+
+                  <th>
                     Date
                   </th>
 
@@ -497,7 +520,11 @@ function Dashboard() {
                       >
 
                         <td>
-                          #{application.id}
+                          {getApplicationIdLabel(application)}
+                        </td>
+
+                        <td>
+                          {getApplicantName(application)}
                         </td>
 
                         <td>
@@ -605,9 +632,20 @@ function Dashboard() {
                       }}
                     >
 
-                      <strong>
-                        Application #{application.id}
-                      </strong>
+                      <div>
+                        <strong>
+                          {getApplicationIdLabel(application)}
+                        </strong>
+                        <div
+                          style={{
+                            marginTop: "4px",
+                            color: "#374151",
+                            fontSize: "14px",
+                          }}
+                        >
+                          {getApplicantName(application)}
+                        </div>
+                      </div>
 
                       <span
                         className={`status-badge ${getStatusClass(
