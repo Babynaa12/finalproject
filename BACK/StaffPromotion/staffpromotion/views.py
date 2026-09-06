@@ -5472,12 +5472,14 @@ def promotion_materials(request):
         material = serializer.save(
             application=application
         )
+        application.refresh_from_db()
+        application.recalculate_points()
 
         create_system_log(
             request.user,
             "PROMOTION_MATERIAL_CREATED",
             (
-                f"Promotion material '{material.title}' "
+                f"Promotion material '{material.get_material_type_display()}' "
                 f"added to application {application.id}"
             ),
             request

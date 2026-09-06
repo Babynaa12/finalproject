@@ -1,7 +1,14 @@
 from django.test import RequestFactory, TestCase, override_settings
 from rest_framework.test import APIClient
 
-from .models import Department, Employee, JobTitle, PromotionApplication, PromotionNotification
+from .models import (
+    Department,
+    Employee,
+    JobTitle,
+    PromotionApplication,
+    PromotionMaterial,
+    PromotionNotification,
+)
 from .views import _filter_queryset_for_user, create_application_notification
 
 
@@ -183,6 +190,46 @@ class PromotionApplicationWorkflowCompletionTests(TestCase):
                 notification_type="HOD_REVIEW",
             ).exists()
         )
+
+    def test_application_total_points_are_recalculated_from_materials(self):
+        department = Department.objects.create(department_name="Humanities")
+        title = JobTitle.objects.create(
+            title_name="Associate Professor",
+            min_appraisal_score=15.00,
+        )
+        staff = Employee.objects.create_user(
+            username="staff_total_points",
+            email="points.staff@example.com",
+            first_name="Staff",
+            last_name="Points",
+            password="Passw0rd!",
+            role="STAFF",
+            department=department,
+        )
+        application = PromotionApplication.objects.create(
+            employee=staff,
+            full_name="Staff Points",
+            current_title=title,
+            targeted_title=title,
+            status="DRAFT",
+        )
+
+        PromotionMaterial.objects.create(
+            application=application,
+            material_type="JOURNAL_ARTICLE",
+            points=12.5,
+        )
+        PromotionMaterial.objects.create(
+            application=application,
+            material_type="BOOK_CHAPTER",
+            points=8,
+        )
+
+        application.refresh_from_db()
+
+        self.assertEqual(float(application.points_required), 15.0)
+        self.assertEqual(float(application.total_points), 20.5)
+        self.assertEqual(float(application.points_difference), 5.5)
 
     def test_notification_read_endpoint_marks_notification_as_read(self):
         department = Department.objects.create(department_name="Humanities")

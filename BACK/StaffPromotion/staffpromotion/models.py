@@ -879,6 +879,39 @@ class PromotionApplication(models.Model):
         auto_now=True
     )
 
+    def recalculate_points(self):
+        total = self.promotion_materials.aggregate(
+            total=models.Sum("points")
+        )["total"] or Decimal("0")
+
+        if self.targeted_title_id and (
+            self.points_required == 0 or self.points_required is None
+        ):
+            self.points_required = Decimal(
+                str(self.targeted_title.min_appraisal_score)
+            )
+
+        self.total_points = Decimal(str(total))
+        self.points_difference = self.total_points - Decimal(
+            str(self.points_required)
+        )
+        self.save(update_fields=["total_points", "points_required", "points_difference", "updated_at"])
+
+    def sync_points_required(self):
+        if self.targeted_title_id and (
+            self.points_required == 0 or self.points_required is None
+        ):
+            self.points_required = Decimal(
+                str(self.targeted_title.min_appraisal_score)
+            )
+
+    def save(self, *args, **kwargs):
+        self.sync_points_required()
+        self.points_difference = Decimal(str(self.total_points)) - Decimal(
+            str(self.points_required)
+        )
+        super().save(*args, **kwargs)
+
     def __str__(self):
         return (
             f"{self.full_name} -> "
@@ -971,6 +1004,20 @@ class PromotionMaterial(models.Model):
     created_at = models.DateTimeField(
         auto_now_add=True
     )
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+
+        if self.application_id:
+            self.application.recalculate_points()
+
+    def delete(self, *args, **kwargs):
+        application = self.application
+        super().delete(*args, **kwargs)
+
+        if application_id := getattr(application, "id", None):
+            application.refresh_from_db()
+            application.recalculate_points()
 
     def __str__(self):
         return (

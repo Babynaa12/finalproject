@@ -690,105 +690,21 @@ function ApplyPromotion() {
       // PROMOTION MATERIALS
       //
       // IMPORTANT:
-      // We send a JSON description of the selected materials.
-      // Files are sent separately.
+      // Do not send the material array/files during the initial
+      // promotion application submission.
       //
-      // This avoids:
-      // promotion_materials[0][material_type]
-      // promotion_materials[0][points]
-      // promotion_materials[0][document]
-      //
-      // which DRF multipart parsing does not handle reliably.
+      // These are maintained as separate review inputs and should be
+      // posted through the dedicated promotion-material workflow,
+      // not bundled into the application creation request.
       // ========================================================
-
-      const selectedMaterials =
-        materials
-          .map(
-            (material, index) => ({
-              ...material,
-              originalIndex: index,
-            })
-          )
-          .filter(
-            (material) =>
-              material.points !== "" ||
-              material.document !== null
-          );
-
-      const materialData =
-        selectedMaterials.map(
-          (material) => ({
-            material_type:
-              material.material_type,
-
-            points:
-              material.points === ""
-                ? "0"
-                : material.points,
-
-            file_index:
-              material.document
-                ? material.originalIndex
-                : null,
-          })
-        );
-
-      // ----------------------------------------------------------------
-      // Send material payload in both compatible formats:
-      // 1) JSON string: backend may parse as a list of materials
-      // 2) indexed field names: easier for DRF serializers / reviewers
-      // ----------------------------------------------------------------
-      data.append(
-        "promotion_materials",
-        JSON.stringify(materialData)
-      );
-
-      materialData.forEach(
-        (item, index) => {
-          data.append(
-            `promotion_materials[${index}][material_type]`,
-            item.material_type
-          );
-          data.append(
-            `promotion_materials[${index}][points]`,
-            String(item.points)
-          );
-          if (item.file_index !== null) {
-            data.append(
-              `promotion_materials[${index}][file_index]`,
-              String(item.file_index)
-            );
-          }
-        }
-      );
-
-      // ========================================================
-      // SEND MATERIAL FILES SEPARATELY
-      //
-      // Example:
-      // material_document_0
-      // material_document_1
-      // ========================================================
-
-      selectedMaterials.forEach(
-        (material) => {
-          if (material.document) {
-            data.append(
-              `material_document_${material.originalIndex}`,
-              material.document
-            );
-          }
-        }
-      );
 
       // ========================================================
       // DO NOT SEND PREVIOUS ACADEMIC REVIEWS
       // DO NOT SEND STUDENT EVALUATIONS
       // DO NOT SEND REVIEW RECORDS
       //
-      // The application endpoint should only create:
-      // 1. PromotionApplication
-      // 2. PromotionMaterial records
+      // The application endpoint should only create the core
+      // promotion application record.
       // ========================================================
 
       data.append(
@@ -812,11 +728,6 @@ function ApplyPromotion() {
         employeeId
       );
 
-      console.log(
-        "Selected promotion materials:",
-        materialData
-      );
-
       // ========================================================
       // POST
       // ========================================================
@@ -831,6 +742,52 @@ function ApplyPromotion() {
             },
           }
         );
+
+      const createdApplicationId =
+        response?.data?.id;
+
+      if (createdApplicationId) {
+        const materialEntries = materials.filter(
+          (material) =>
+            material.points !== "" &&
+            material.points !== null &&
+            material.points !== undefined
+        );
+
+        for (const material of materialEntries) {
+          const materialForm = new FormData();
+
+          materialForm.append(
+            "application",
+            String(createdApplicationId)
+          );
+          materialForm.append(
+            "material_type",
+            material.material_type
+          );
+          materialForm.append(
+            "points",
+            String(material.points)
+          );
+
+          if (material.document) {
+            materialForm.append(
+              "document",
+              material.document
+            );
+          }
+
+          await api.post(
+            "/api/promotion-materials/",
+            materialForm,
+            {
+              headers: {
+                Authorization: `Bearer ${token}`,
+              },
+            }
+          );
+        }
+      }
 
       console.log(
         "Application created:",
