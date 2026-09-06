@@ -422,7 +422,7 @@ function Dashboard() {
 
             {/* NOTIFICATIONS */}
 
-            {/* <div className="card">
+           <div className="card">
 
               <h5>
                 Notifications
@@ -436,7 +436,7 @@ function Dashboard() {
                 Unread notifications
               </p>
 
-            </div> */}
+            </div> 
 
           </div>
 

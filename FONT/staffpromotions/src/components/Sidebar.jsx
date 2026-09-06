@@ -103,11 +103,11 @@ function Sidebar() {
         icon: <FaChalkboardTeacher />,
       },
 
-      // {
-      //   path: "/staff/notifications",
-      //   label: "Notifications",
-      //   icon: <FaBell />,
-      // },
+      {
+        path: "/staff/notifications",
+        label: "Notifications",
+        icon: <FaBell />,
+      },
 
       {
         path: "/staff/appeal",
@@ -208,6 +208,12 @@ function Sidebar() {
         label: "History",
         icon: <FaHistory />,
       },
+
+      {
+        path: "/hod/notifications",
+        label: "Notifications",
+        icon: <FaBell />,
+      },
     ],
 
     // ==========================================================
@@ -243,6 +249,12 @@ function Sidebar() {
         path: "/dean/history",
         label: "History",
         icon: <FaHistory />,
+      },
+
+      {
+        path: "/dean/notifications",
+        label: "Notifications",
+        icon: <FaBell />,
       },
     ],
 
@@ -280,6 +292,12 @@ function Sidebar() {
       //   label: "Profile",
       //   icon: <FaUser />,
       // },
+
+      {
+        path: "/reviewer/notifications",
+        label: "Notifications",
+        icon: <FaBell />,
+      },
     ],
   };
 

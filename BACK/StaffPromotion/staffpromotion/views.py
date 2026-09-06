@@ -6492,6 +6492,41 @@ def list_notifications(request):
     )
 
 
+@api_view(["GET", "POST", "PATCH"])
+@permission_classes([IsAuthenticated])
+def mark_notification_read(request, pk):
+    try:
+        notification = PromotionNotification.objects.get(id=pk, employee=request.user)
+    except PromotionNotification.DoesNotExist:
+        return Response(
+            {"error": "Notification not found."},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    notification.is_read = True
+    notification.read_at = timezone.now()
+    notification.save(update_fields=["is_read", "read_at"])
+
+    return Response(PromotionNotificationSerializer(notification).data)
+
+
+@api_view(["POST", "PATCH"])
+@permission_classes([IsAuthenticated])
+def mark_all_notifications_read(request):
+    notifications = PromotionNotification.objects.filter(
+        employee=request.user,
+        is_read=False,
+    )
+
+    now = timezone.now()
+    notifications.update(is_read=True, read_at=now)
+
+    return Response(
+        {"updated": notifications.count(), "success": True},
+        status=status.HTTP_200_OK,
+    )
+
+
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def notify_application_staff(request, pk):

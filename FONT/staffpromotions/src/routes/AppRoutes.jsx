@@ -56,6 +56,7 @@ import HODApplication from "../pages/hod/Application";
 import HODApplicationDetail from "../pages/hod/ApplicationDetail";
 import HODHistory from "../pages/hod/History";
 import HODReviewApplication from "../pages/hod/ReviewApplication";
+import HODNotificationPage from "../pages/common/RoleNotifications";
 import HODStaff from "../pages/hod/Staff";
 
 // ============================================================
@@ -67,6 +68,7 @@ import DeanApplication from "../pages/dean/Application";
 import DeanApplicationDetail from "../pages/dean/ApplicationDetail";
 import DeanHistory from "../pages/dean/History";
 import DeanReviewApplication from "../pages/dean/ReviewApplication";
+import DeanNotificationPage from "../pages/common/RoleNotifications";
 
 // ============================================================
 // REVIEWER PAGES
@@ -78,6 +80,7 @@ import ReviewerAssignedReview from "../pages/reviewer/AssignedReview";
 import ReviewerCompleteReviews from "../pages/reviewer/CompleteReviews";
 import ReviewerProfile from "../pages/reviewer/Profile";
 import ReviewerReviewMaterial from "../pages/reviewer/ReviewMaterial";
+import ReviewerNotificationPage from "../pages/common/RoleNotifications";
 
 
 // ============================================================
@@ -468,6 +471,19 @@ function AppRoutes() {
         }
       />
 
+      {/* NOTIFICATIONS */}
+
+      <Route
+        path="/hod/notifications"
+        element={
+          <ProtectedRoute allowedRoles={["HOD"]}>
+            <HODLayout>
+              <HODNotificationPage role="HOD" />
+            </HODLayout>
+          </ProtectedRoute>
+        }
+      />
+
 
       {/* ======================================================
           DEAN
@@ -555,6 +571,19 @@ function AppRoutes() {
         }
       />
 
+      {/* NOTIFICATIONS */}
+
+      <Route
+        path="/dean/notifications"
+        element={
+          <ProtectedRoute allowedRoles={["DEAN"]}>
+            <DeanLayout>
+              <DeanNotificationPage role="DEAN" />
+            </DeanLayout>
+          </ProtectedRoute>
+        }
+      />
+
 
       {/* ======================================================
           REVIEWER
@@ -637,6 +666,19 @@ function AppRoutes() {
           <ProtectedRoute allowedRoles={["REVIEWER"]}>
             <ReviewerLayout>
               <ReviewerProfile />
+            </ReviewerLayout>
+          </ProtectedRoute>
+        }
+      />
+
+      {/* NOTIFICATIONS */}
+
+      <Route
+        path="/reviewer/notifications"
+        element={
+          <ProtectedRoute allowedRoles={["REVIEWER"]}>
+            <ReviewerLayout>
+              <ReviewerNotificationPage role="REVIEWER" />
             </ReviewerLayout>
           </ProtectedRoute>
         }

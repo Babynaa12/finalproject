@@ -1,4 +1,5 @@
 from django.test import RequestFactory, TestCase, override_settings
+from rest_framework.test import APIClient
 
 from .models import Department, Employee, JobTitle, PromotionApplication, PromotionNotification
 from .views import _filter_queryset_for_user, create_application_notification
@@ -182,3 +183,76 @@ class PromotionApplicationWorkflowCompletionTests(TestCase):
                 notification_type="HOD_REVIEW",
             ).exists()
         )
+
+    def test_notification_read_endpoint_marks_notification_as_read(self):
+        department = Department.objects.create(department_name="Humanities")
+        title = JobTitle.objects.create(title_name="Associate Professor")
+        staff = Employee.objects.create_user(
+            username="staff_read",
+            email="read.staff@example.com",
+            first_name="Staff",
+            last_name="Reader",
+            password="Passw0rd!",
+            role="STAFF",
+            department=department,
+        )
+        application = PromotionApplication.objects.create(
+            employee=staff,
+            full_name="Staff Reader",
+            current_title=title,
+            targeted_title=title,
+            status="SUBMITTED",
+        )
+        notification = create_application_notification(
+            application,
+            notification_type="GENERAL",
+            title="New update",
+            message="Your promotion application has been updated.",
+            status="SUBMITTED",
+        )
+
+        client = APIClient()
+        client.force_authenticate(user=staff)
+
+        response = client.patch(f"/api/notifications/{notification.id}/")
+
+        self.assertEqual(response.status_code, 200)
+        notification.refresh_from_db()
+        self.assertTrue(notification.is_read)
+        self.assertIsNotNone(notification.read_at)
+
+    def test_notification_read_alias_endpoint_marks_notification_as_read(self):
+        department = Department.objects.create(department_name="Languages")
+        title = JobTitle.objects.create(title_name="Senior Lecturer")
+        staff = Employee.objects.create_user(
+            username="staff_read_alias",
+            email="alias.read.staff@example.com",
+            first_name="Staff",
+            last_name="Alias",
+            password="Passw0rd!",
+            role="STAFF",
+            department=department,
+        )
+        application = PromotionApplication.objects.create(
+            employee=staff,
+            full_name="Staff Alias",
+            current_title=title,
+            targeted_title=title,
+            status="SUBMITTED",
+        )
+        notification = create_application_notification(
+            application,
+            notification_type="GENERAL",
+            title="Alias update",
+            message="This notification is marked read via the alias route.",
+            status="SUBMITTED",
+        )
+
+        client = APIClient()
+        client.force_authenticate(user=staff)
+
+        response = client.post(f"/api/notifications/{notification.id}/read/")
+
+        self.assertEqual(response.status_code, 200)
+        notification.refresh_from_db()
+        self.assertTrue(notification.is_read)

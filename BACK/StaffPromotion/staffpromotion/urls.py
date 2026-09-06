@@ -45,6 +45,24 @@ urlpatterns = [
         name="notifications_list"
     ),
 
+    path(
+        "notifications/read-all/",
+        views.mark_all_notifications_read,
+        name="notifications_mark_all_read"
+    ),
+
+    path(
+        "notifications/<int:pk>/",
+        views.mark_notification_read,
+        name="notifications_mark_read_detail"
+    ),
+
+    path(
+        "notifications/<int:pk>/read/",
+        views.mark_notification_read,
+        name="notifications_mark_read"
+    ),
+
     # ========================================================
     # PROMOTION ELIGIBILITY
     # ========================================================
