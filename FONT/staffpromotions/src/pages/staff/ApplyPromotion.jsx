@@ -925,7 +925,7 @@ function ApplyPromotion() {
           EMPLOYEE INFORMATION
       ====================================================== */}
 
-      <div style={styles.employeeBox}>
+      {/* <div style={styles.employeeBox}>
         <div>
           <strong>
             Employee:
@@ -933,13 +933,8 @@ function ApplyPromotion() {
           {fullName || "Not available"}
         </div>
 
-        <div>
-          <strong>
-            Employee ID:
-          </strong>{" "}
-          {employeeId || "Not available"}
-        </div>
-      </div>
+        
+      </div> */}
 
       <form
         onSubmit={submitApplication}

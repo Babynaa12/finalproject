@@ -28,6 +28,12 @@ urlpatterns = [
         name="token_refresh"
     ),
 
+    path(
+        "profile/",
+        views.my_profile,
+        name="my_profile"
+    ),
+
 
     # ========================================================
     # DASHBOARD

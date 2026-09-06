@@ -231,6 +231,40 @@ class PromotionApplicationWorkflowCompletionTests(TestCase):
         self.assertEqual(float(application.total_points), 20.5)
         self.assertEqual(float(application.points_difference), 5.5)
 
+    def test_profile_update_endpoint_updates_personal_information(self):
+        department = Department.objects.create(department_name="Humanities")
+        staff = Employee.objects.create_user(
+            username="staff_profile",
+            email="profile.staff@example.com",
+            first_name="Old",
+            last_name="Name",
+            phone_number="0711000000",
+            password="Passw0rd!",
+            role="STAFF",
+            department=department,
+        )
+
+        client = APIClient()
+        client.force_authenticate(user=staff)
+
+        response = client.patch(
+            "/api/profile/",
+            {
+                "first_name": "New",
+                "last_name": "Name",
+                "phone_number": "0711222333",
+                "address": "Plot 12, Dar es Salaam",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        staff.refresh_from_db()
+        self.assertEqual(staff.first_name, "New")
+        self.assertEqual(staff.last_name, "Name")
+        self.assertEqual(staff.phone_number, "0711222333")
+        self.assertEqual(staff.address, "Plot 12, Dar es Salaam")
+
     def test_notification_read_endpoint_marks_notification_as_read(self):
         department = Department.objects.create(department_name="Humanities")
         title = JobTitle.objects.create(title_name="Associate Professor")
